@@ -334,7 +334,8 @@ export default function InventoryView({
 
       {/* RENDER PRODUCTS CATALOG TAB */}
       {subTab === 'products' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Products List & Search Filters (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
             {/* Search + Filter controls */}
@@ -382,11 +383,10 @@ export default function InventoryView({
                 </select>
                 <BadgeAlert className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none top-3.5" />
               </div>
-            </div>
-
-            {/* Products grid list cards */}
+                        {/* Products grid list cards */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
+              {/* Desktop and Tablet table view */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-bold uppercase tracking-wider">
@@ -470,6 +470,88 @@ export default function InventoryView({
                 </table>
               </div>
 
+              {/* Mobile Card based list */}
+              <div className="md:hidden divide-y divide-slate-100" id="inv-products-mobile-list">
+                {paginatedProducts.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 font-medium">
+                    No se encontraron alimentos correspondientes a la consulta...
+                  </div>
+                ) : (
+                  paginatedProducts.map((p) => {
+                    const isOutOfStock = p.currentStock <= 0;
+                    const isUnderMin = p.currentStock > 0 && p.currentStock <= p.minStock;
+                    const cat = categories.find(c => c.id === p.categoryId);
+                    const uni = units.find(u => u.id === p.unitId);
+
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedProduct(p)}
+                        className={`p-4 transition duration-150 cursor-pointer text-xs space-y-2.5 ${
+                          selectedProduct?.id === p.id ? 'bg-emerald-50/40 text-emerald-950 font-medium' : 'hover:bg-slate-50/50 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-sans font-bold text-slate-800 text-sm leading-tight">{p.name}</div>
+                            <span className="text-[10px] text-slate-400 font-sans tracking-wide bg-slate-100 px-1.5 py-0.5 rounded mt-1 inline-block">
+                              {cat ? cat.name : 'N/A'}
+                            </span>
+                          </div>
+
+                          {isOutOfStock ? (
+                            <span className="px-2 py-0.5 rounded text-[8px] font-extrabold uppercase bg-red-100 text-red-800 border border-red-200">
+                              Sin Stock
+                            </span>
+                          ) : isUnderMin ? (
+                            <span className="px-2 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
+                              Bajo Mínimo
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[8px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Estable
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-slate-600">
+                          <div>
+                            <span className="text-[9px] text-slate-450 uppercase block font-bold">Stock Actual</span>
+                            <strong className={`font-mono text-sm ${isOutOfStock ? 'text-red-650' : isUnderMin ? 'text-amber-650' : 'text-slate-850'}`}>
+                              {p.currentStock.toLocaleString('es-DO', { minimumFractionDigits: 1 })} {uni ? uni.code : 'und'}
+                            </strong>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] text-slate-450 uppercase block font-bold">Costo Promedio</span>
+                            <strong className="font-mono text-slate-800 text-sm">
+                              RD${p.averageCost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-700 pt-1 border-t border-dashed border-slate-100">
+                          <span>Ver ficha de stock &rarr;</span>
+                          {canAdjust && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProduct(p);
+                                setAdjQty(0);
+                                setAdjComment('');
+                                setIsAdjustmentModalOpen(true);
+                              }}
+                              className="px-2.5 py-1 bg-amber-50 rounded-lg text-amber-700 border border-amber-200 uppercase text-[9px] font-extrabold"
+                            >
+                              Ajuste rápido
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
               {/* Pagination controls */}
               {totalPages > 1 && (
                 <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50 text-xs text-slate-600">
@@ -478,14 +560,14 @@ export default function InventoryView({
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="p-1 px-3 bg-white border border-slate-200 rounded hover:bg-slate-50 transition disabled:opacity-40"
+                      className="p-1.5 px-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition disabled:opacity-40"
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="p-1 px-3 bg-white border border-slate-200 rounded hover:bg-slate-50 transition disabled:opacity-40"
+                      className="p-1.5 px-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition disabled:opacity-40"
                     >
                       Siguiente
                     </button>
@@ -493,10 +575,10 @@ export default function InventoryView({
                 </div>
               )}
             </div>
-          </div>
+          </div>      </div>
 
           {/* Product Detail Sidebar Drawer inside view (4 cols) */}
-          <div className="lg:col-span-4">
+          <div className="hidden lg:block lg:col-span-4">
             {selectedProduct ? (
               <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 sticky top-[95px] space-y-6" id="inventory-detail-card">
                 {/* Header */}
@@ -619,7 +701,130 @@ export default function InventoryView({
             )}
           </div>
         </div>
-      )}
+
+        {/* Mobile Product Detail floating screen overlay / bottom sheet */}
+        {selectedProduct && (
+          <div
+            className="lg:hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end justify-center animate-fade-in"
+            id="mobile-product-sheet-backdrop"
+            onClick={() => setSelectedProduct(null)}
+          >
+            <div
+              className="bg-white rounded-t-3xl w-full max-h-[85vh] overflow-y-auto p-6 pb-8 space-y-6 shadow-xl flex flex-col justify-between animate-slide-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <span className="text-[9px] font-extrabold tracking-wider uppercase bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded">
+                      Ficha de Almacén
+                    </span>
+                    <h3 className="font-display font-extrabold text-lg text-slate-800 mt-1 leading-snug">
+                      {selectedProduct.name}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setSelectedProduct(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-lg"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Primary Stats */}
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
+                    <span className="text-[9px] text-slate-400 uppercase font-sans font-extrabold">Existencia</span>
+                    <p className="text-lg font-mono font-bold mt-0.5 text-slate-800">
+                      {selectedProduct.currentStock} <span className="text-xs text-slate-400">{units.find(u => u.id === selectedProduct.unitId)?.code || 'lb'}</span>
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
+                    <span className="text-[9px] text-slate-400 uppercase font-sans font-extrabold">Costo Promedio</span>
+                    <p className="text-lg font-mono font-bold mt-0.5 text-slate-800">
+                      RD${selectedProduct.averageCost.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 text-xs font-sans mt-4">
+                  <div>
+                    <h4 className="font-bold text-slate-400 uppercase text-[9px] tracking-wider">Descripción</h4>
+                    <p className="text-slate-600 mt-1.5 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100">{selectedProduct.description || 'Sin descripción detallada.'}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-bold text-slate-400 uppercase text-[9px] tracking-wider">Mínimo en Cocina</h4>
+                      <p className="text-slate-700 font-bold font-mono mt-0.5">{selectedProduct.minStock} {units.find(u => u.id === selectedProduct.unitId)?.code || 'lb'}</p>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-400 uppercase text-[9px] tracking-wider">Capacidad Máxima</h4>
+                      <p className="text-slate-700 font-bold font-mono mt-0.5">{selectedProduct.maxStock} {units.find(u => u.id === selectedProduct.unitId)?.code || 'lb'}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-slate-400 uppercase text-[9px] tracking-wider">Último Costo de Compra</h4>
+                    <p className="text-slate-700 font-bold font-mono mt-0.5 text-xs">RD${selectedProduct.lastPrice.toFixed(2)}</p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1.5">Proveedores Autorizados</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedProduct.providerIds.length === 0 ? (
+                        <span className="text-slate-400 italic">No asociado a ningún proveedor.</span>
+                      ) : (
+                        selectedProduct.providerIds.map(id => {
+                          const prov = providers.find(p => p.id === id);
+                          return (
+                            <span key={id} className="py-1 px-2 border border-slate-200 rounded-lg text-[9px] font-bold text-slate-600 bg-slate-50">
+                              {prov ? prov.name : 'N/A'}
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons for Mobile layout */}
+              <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    handleOpenProductModal(selectedProduct);
+                  }}
+                  disabled={!canEdit}
+                  className="w-full py-3 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
+                >
+                  <Edit2 className="w-4 h-4 text-slate-400" />
+                  Editar Catálogo de Producto
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (!canAdjust) {
+                      alert('Tu rol actual no cuenta con permisos para registrar ajustes.');
+                      return;
+                    }
+                    setAdjQty(0);
+                    setAdjComment('');
+                    setIsAdjustmentModalOpen(true);
+                  }}
+                  disabled={!canAdjust}
+                  className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-100/50"
+                >
+                  <Sliders className="w-4 h-4" />
+                  Ajuste Manual Rápido
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )}
 
       {/* RENDER CATEGORIES TAB */}
       {subTab === 'categories' && (

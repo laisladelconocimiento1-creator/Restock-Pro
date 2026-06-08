@@ -175,33 +175,63 @@ export default function Sidebar({
           <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white font-bold font-display text-lg shadow-sm">
             R
           </div>
-          <span className="font-display font-bold text-slate-800 text-base">Restock Pro</span>
+          <span className="font-display font-bold text-slate-800 text-base">{activeTab === 'Dashboard' ? 'Restock Pro' : activeTab}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold border ${getRoleBadgeColor(currentUser.role)}`}>
+        <div className="flex items-center gap-2">
+          <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-bold border ${getRoleBadgeColor(currentUser.role)}`}>
             {currentUser.role}
           </span>
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-1.5 text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition"
-            id="btn-open-mobile-nav"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
         </div>
+      </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 md:hidden flex items-center justify-around px-2 py-1 z-40 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]" id="mobile-bottom-nav">
+        {[
+          { id: 'Dashboard', label: 'Inicio', icon: LayoutDashboard },
+          { id: 'Inventario', label: 'Inventario', icon: Boxes },
+          { id: 'Solicitudes de cocina', label: 'Solicitudes', icon: ChefHat },
+          { id: 'Compras', label: 'Compras', icon: ShoppingBag },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleSelectNav(item.id)}
+              className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] font-medium transition-colors ${
+                isActive ? 'text-orange-600 font-bold' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <Icon className={`w-5 h-5 mb-0.5 ${isActive ? 'text-orange-500' : 'text-slate-400'}`} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+        
+        {/* 'Más' button to open full Drawer */}
+        <button
+          onClick={() => setMobileOpen(true)}
+          className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] font-medium transition-colors ${
+            mobileOpen ? 'text-orange-600 font-bold' : 'text-slate-400'
+          }`}
+          id="btn-open-mobile-nav-plus"
+        >
+          <Menu className="w-5 h-5 mb-0.5 text-slate-400" />
+          <span>Más</span>
+        </button>
       </div>
 
       {/* Mobile Drawer Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 md:hidden transition-all"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 md:hidden transition-all"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Mobile Drawer Panel */}
       <div
-        className={`fixed top-0 bottom-0 left-0 w-80 bg-white z-50 transform transition-transform duration-300 ease-in-out md:hidden ${
+        className={`fixed top-0 bottom-0 left-0 w-72 bg-white z-50 transform transition-transform duration-300 ease-in-out md:hidden ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

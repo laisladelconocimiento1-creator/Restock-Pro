@@ -79,7 +79,8 @@ export default function AuditView({ logs }: AuditProps) {
 
       {/* Secure table listing */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop and Tablet table representation */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-55 text-slate-400 font-bold uppercase tracking-wider">
@@ -137,6 +138,55 @@ export default function AuditView({ logs }: AuditProps) {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile responsive timeline representation */}
+        <div className="md:hidden divide-y divide-slate-100 text-xs" id="mobile-audit-timeline">
+          {filteredLogs.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 font-medium">
+              No se han encontrado registros en el ledger...
+            </div>
+          ) : (
+            filteredLogs.map((log) => (
+              <div key={log.id} className="p-4 space-y-2 bg-white">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-mono">
+                      {new Date(log.date).toLocaleDateString()} {new Date(log.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <strong className="text-slate-800 font-sans text-xs mt-0.5 block">{log.userName}</strong>
+                  </div>
+                  <span className="bg-slate-100 text-slate-600 py-0.5 px-2 rounded font-sans text-[8px] font-extrabold uppercase border">
+                    {log.userRole}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[9px] text-slate-400 uppercase font-sans font-extrabold">Módulo:</span>
+                    <span className="font-sans text-slate-700 font-bold">{log.module}</span>
+                    <span className="text-slate-200">|</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-sans font-extrabold">Folio:</span>
+                    <span className="font-mono text-slate-600 font-bold truncate max-w-[100px]">{log.recordId || '—'}</span>
+                  </div>
+
+                  <p className="font-mono font-bold text-red-700 uppercase tracking-wide text-[10px]">
+                    {log.action}
+                  </p>
+                </div>
+
+                {log.comment && (
+                  <p className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-[10px] font-sans text-slate-600 italic">
+                    {log.comment}
+                  </p>
+                )}
+
+                <div className="text-[9px] text-slate-400 font-sans text-right">
+                  Disp: {log.device || 'Mobile Client'}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

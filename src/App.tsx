@@ -235,7 +235,7 @@ export default function App() {
       />
 
       {/* Primary viewport content frame container */}
-      <main className="flex-1 md:pl-64 min-h-screen relative flex flex-col">
+      <main className="flex-1 md:pl-64 pb-16 md:pb-0 min-h-screen relative flex flex-col">
         <div className="p-4 md:p-8 flex-1 max-w-7xl mx-auto w-full space-y-6">
 
           {/* Surtido converting notification bar indicator banner */}

@@ -172,22 +172,22 @@ export default function DashboardView({
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard-kpi-grid">
         {/* KPI 1: Inventory Value */}
-        <div className="bg-white rounded border border-slate-200 shadow-sm p-4 hover:shadow transition">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-xs font-sans font-bold uppercase tracking-wider text-slate-400">
               Valor Total Inventario
             </span>
-            <div className="w-7 h-7 rounded bg-orange-50 flex items-center justify-center text-orange-600">
-              <Box className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+              <Box className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-xl font-display font-bold text-slate-900">
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="text-2xl font-display font-bold text-slate-800">
               RD${totalInventoryValue.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
-            <span className="text-[10px] font-sans font-medium text-slate-400">DOP</span>
+            <span className="text-xs font-sans font-medium text-slate-400">DOP</span>
           </div>
-          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-sans text-slate-500">
+          <div className="mt-2.5 flex items-center gap-1 text-[11px] font-sans font-medium text-slate-500">
             <span>Control de <strong className="font-bold text-slate-700">{products.length}</strong> productos activos</span>
           </div>
         </div>
@@ -431,7 +431,8 @@ export default function DashboardView({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            {/* Desktop and Tablet table view */}
+            <table className="hidden sm:table w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
                   <th className="py-2.5">Código</th>
@@ -463,6 +464,42 @@ export default function DashboardView({
                 ))}
               </tbody>
             </table>
+
+            {/* Mobile card-based list */}
+            <div className="sm:hidden space-y-3" id="dashboard-latest-purchases-mobile">
+              {purchases.slice(0, 4).length === 0 ? (
+                <p className="text-xs text-slate-400 italic py-4 text-center">Sin compras recientes registradas</p>
+              ) : (
+                purchases.slice(0, 4).map((p) => (
+                  <div key={p.id} className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <strong className="font-sans font-bold text-slate-800">{p.code}</strong>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                        p.status === 'Recibida'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                          : p.status === 'Pendiente'
+                          ? 'bg-amber-50 text-amber-700 border-amber-100'
+                          : 'bg-red-50 text-red-700 border-red-100'
+                      }`}>
+                        {p.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span>Proveedor:</span>
+                      <strong className="text-slate-800 truncate max-w-[150px]">{p.providerName}</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span>Método:</span>
+                      <span className="font-medium text-slate-700">{p.paymentMethod}</span>
+                    </div>
+                    <div className="flex justify-between items-center border-t border-slate-200/60 pt-1.5 mt-1">
+                      <span className="text-slate-450 uppercase text-[9px] font-bold">Total:</span>
+                      <strong className="font-mono text-emerald-700 font-extrabold text-sm">RD${p.total.toLocaleString('es-DO')}</strong>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 

@@ -285,7 +285,8 @@ export default function PurchasesView({
       {/* RENDER VIEW: PURCHASES LIST */}
       {activeView === 'list' && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop/Tablet view representation */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-bold uppercase tracking-wider">
@@ -347,6 +348,77 @@ export default function PurchasesView({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile responsive cards list representation */}
+          <div className="md:hidden divide-y divide-slate-100 text-xs" id="mobile-purchases-list">
+            {purchases.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 font-medium">
+                No hay compras alternativas registradas.
+              </div>
+            ) : (
+              purchases.map((p) => (
+                <div key={p.id} className="p-4 space-y-3 bg-white">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <strong className="text-slate-800 text-sm">{p.code}</strong>
+                      <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
+                        Fecha: {new Date(p.invoiceDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${
+                      p.status === 'Recibida'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        : p.status === 'Pendiente'
+                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                        : 'bg-red-50 text-red-700 border-red-100'
+                    }`}>
+                      {p.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-slate-650 font-sans leading-relaxed">
+                    <div>
+                      <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Proveedor</span>
+                      <span className="font-bold text-slate-705 truncate max-w-[120px] block">{p.providerName}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Total Real RD$</span>
+                      <strong className="font-mono text-slate-850 text-xs">RD${p.total.toLocaleString('es-DO')}</strong>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <div>
+                      <span className="text-slate-400 uppercase text-[8px] block font-bold">N° Factura</span>
+                      <span className="font-mono text-slate-700 font-bold">{p.invoiceNumber}</span>
+                    </div>
+                    <div className="text-right">
+                      {p.invoiceFileUrl ? (
+                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-750 px-2 py-0.5 rounded text-[9px] font-bold border border-blue-100">
+                          <FileText className="w-3 h-3 text-blue-400" />
+                          PDF/IMG
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-slate-400 italic">Sin comprobante</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-dashed border-slate-100">
+                    <button
+                      onClick={() => {
+                        setSelectedPurchaseId(p.id);
+                        setActiveView('detail');
+                      }}
+                      className="w-full py-2.5 bg-orange-55 border border-orange-200/80 hover:bg-orange-100 text-orange-700 font-sans font-bold rounded-xl transition text-center text-xs flex items-center justify-center gap-1"
+                    >
+                      Ver Detalle de Compra &rarr;
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

@@ -253,7 +253,8 @@ export default function PhysicalInventoryView({
 
           {/* Session history tables */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Desktop Ledger Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-bold uppercase tracking-wider">
@@ -312,6 +313,66 @@ export default function PhysicalInventoryView({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile responsive cards list representation */}
+            <div className="md:hidden divide-y divide-slate-100 text-xs" id="mobile-physical-sessions-list">
+              {sessions.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 font-medium">
+                  No hay registros de auditorías físicas creadas...
+                </div>
+              ) : (
+                sessions.map((s) => (
+                  <div key={s.id} className="p-4 space-y-3 bg-white">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <strong className="text-slate-800 text-sm font-semibold">{s.code}</strong>
+                        <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
+                          Planificado: {new Date(s.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${getStatusBadge(s.status)}`}>
+                        {s.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-slate-650 font-sans leading-relaxed">
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Área Auditoría</span>
+                        <span className="font-bold text-slate-705">{s.area}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Insumos Registrados</span>
+                        <strong className="font-sans text-slate-800 font-bold">{s.items.length} productos</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[10px] text-slate-500 flex items-center justify-between">
+                      <span>Organizador: <strong className="font-sans font-bold text-slate-600">{s.creatorName}</strong></span>
+                    </div>
+
+                    <div className="pt-2 border-t border-dashed border-slate-100 flex gap-2">
+                      <button
+                        onClick={() => handleOpenDetail(s)}
+                        className="flex-1 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-sans font-bold rounded-xl transition text-center text-xs flex items-center justify-center gap-1"
+                      >
+                        <Eye className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        Auditar Conteo
+                      </button>
+
+                      {(s.status === 'Borrador' || s.status === 'Rechazado') && (
+                        <button
+                          onClick={() => handleOpenCounting(s)}
+                          className="flex-1 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-sans font-bold rounded-xl transition text-center text-xs flex items-center justify-center gap-1.5"
+                        >
+                          <Play className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          Conteo Real
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

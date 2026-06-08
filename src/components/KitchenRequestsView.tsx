@@ -212,7 +212,8 @@ export default function KitchenRequestsView({
       {/* RENDER VIEW: LIST */}
       {activeView === 'list' && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop/Tablet table representation */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-bold uppercase tracking-wider">
@@ -265,6 +266,61 @@ export default function KitchenRequestsView({
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile responsive cards list representation */}
+          <div className="md:hidden divide-y divide-slate-100 text-xs" id="mobile-requests-list">
+            {requests.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 font-medium">
+                No hay solicitudes de cocina registradas.
+              </div>
+            ) : (
+              requests.map((r) => (
+                <div key={r.id} className="p-4 space-y-3 bg-white">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <strong className="text-slate-800 text-sm">{r.code}</strong>
+                      <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
+                        {new Date(r.date).toLocaleDateString()} {new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${getStatusBadge(r.status)}`}>
+                      {r.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-slate-650 font-sans leading-relaxed">
+                    <div>
+                      <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Solicitante</span>
+                      <span className="font-bold text-slate-705">{r.creatorName}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Insumos</span>
+                      <span className="font-mono text-slate-800 font-bold">{r.items.length} {r.items.length === 1 ? 'insumo' : 'insumos'}</span>
+                    </div>
+                  </div>
+
+                  {r.approvedByName && (
+                    <div className="bg-emerald-50/40 p-2.5 rounded-xl text-[10px] text-emerald-800 flex items-center gap-1.5 border border-emerald-100/50">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                      <span>Autorizado por: <strong className="font-sans font-extrabold text-emerald-900">{r.approvedByName}</strong></span>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-dashed border-slate-100">
+                    <button
+                      onClick={() => {
+                        setSelectedReqId(r.id);
+                        setActiveView('detail');
+                      }}
+                      className="w-full py-2.5 bg-orange-55 border border-orange-200/80 hover:bg-orange-100 text-orange-700 font-sans font-bold rounded-xl transition text-center text-xs flex items-center justify-center gap-1"
+                    >
+                      Revisar Detalles &rarr;
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
