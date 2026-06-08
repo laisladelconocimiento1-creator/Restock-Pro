@@ -65,6 +65,18 @@ function setLocalStorageItem<T>(key: string, value: T): void {
 
 // Check if initialized
 export function initializeStore(forceReset = false) {
+  const versionKey = 'restock_pro_clean_v3-rd';
+  const hasBeenCleaned = localStorage.getItem(versionKey);
+
+  if (forceReset || !hasBeenCleaned) {
+    // Clear out our specific keys to reset of old mock data
+    Object.values(KEYS).forEach(key => {
+      localStorage.removeItem(key);
+    });
+    localStorage.setItem(versionKey, 'true');
+    forceReset = true;
+  }
+
   if (forceReset || !localStorage.getItem(KEYS.PRODUCTS)) {
     setLocalStorageItem(KEYS.CURRENT_USER, mockUsers[0]); // default to Carlos Admin
     setLocalStorageItem(KEYS.USERS, mockUsers);
