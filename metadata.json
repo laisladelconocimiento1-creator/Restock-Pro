@@ -1,0 +1,6 @@
+{
+  "name": "Restock Pro",
+  "description": "Sistema de back-offices gastronómico para control de inventario, compras, solicitudes de cocina, auditoría y libro de compras.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
