@@ -275,25 +275,17 @@ export default function App() {
               categories={categories}
               units={units}
               providers={providers}
-              currentUserRole={currentUser.role}
+              currentUser={currentUser}
+              physicalSessions={physicalSessions}
+              movements={movements}
               onAddCategory={handleAddCategory}
               onAddUnit={handleAddUnit}
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onApplyAdjustment={handleManualAdjustment}
-            />
-          )}
-
-          {activeModule === 'Inventario físico' && (
-            <PhysicalInventoryView
-              sessions={physicalSessions}
-              products={products}
-              units={units}
-              currentUserRole={currentUser.role}
-              currentUserId={currentUser.id}
-              currentUserName={currentUser.name}
-              onAddSession={handleAddSession}
-              onUpdateSession={handleUpdateSession}
+              onAddPhysicalSession={handleAddSession}
+              onUpdatePhysicalSession={handleUpdateSession}
+              onReloadAllData={reloadAllDataFromStore}
             />
           )}
 
@@ -403,16 +395,7 @@ export default function App() {
             />
           )}
 
-          {activeModule === 'Importar lista de inventario' && (
-            <InventoryImportView
-              products={products}
-              categories={categories}
-              units={units}
-              providers={providers}
-              currentUser={currentUser}
-              onReloadAllData={reloadAllDataFromStore}
-            />
-          )}
+
 
         </div>
       </main>

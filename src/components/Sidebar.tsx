@@ -56,8 +56,6 @@ export default function Sidebar({
   const navItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'Inventario', label: 'Inventario', icon: Boxes },
-    { id: 'Inventario físico', label: 'Inventario Físico', icon: ClipboardCheck },
-    { id: 'Importar lista de inventario', label: 'Importar lista de inventario', icon: FileSpreadsheet },
     { id: 'Solicitudes de cocina', label: 'Solicitudes Cocina', icon: ChefHat },
     { id: 'Compras', label: 'Compras', icon: ShoppingBag },
     { id: 'Porcionamiento', label: 'Porcionamiento', icon: Scale },

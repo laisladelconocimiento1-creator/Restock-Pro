@@ -230,6 +230,9 @@ export const store = {
   getProducts(): Product[] {
     return getLocalStorageItem<Product[]>(KEYS.PRODUCTS, mockProducts);
   },
+  saveProducts(products: Product[]): void {
+    setLocalStorageItem(KEYS.PRODUCTS, products);
+  },
   addProduct(product: Product): void {
     const list = this.getProducts();
     list.push(product);
@@ -408,6 +411,9 @@ export const store = {
   // Movements
   getMovements(): InventoryMovement[] {
     return getLocalStorageItem<InventoryMovement[]>(KEYS.MOVEMENTS, mockMovements);
+  },
+  saveMovements(movements: InventoryMovement[]): void {
+    setLocalStorageItem(KEYS.MOVEMENTS, movements);
   },
   addMovement(movement: InventoryMovement): void {
     const list = this.getMovements();

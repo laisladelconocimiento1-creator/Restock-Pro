@@ -23,6 +23,7 @@ import {
   Info
 } from 'lucide-react';
 import { Product, Unit, MenuItem, MenuRecipe, MenuRecipeIngredient, MenuItemAlias, Combo, Category } from '../types';
+import { store } from '../data/store';
 
 interface MenuAndRecipesViewProps {
   products: Product[];
@@ -104,6 +105,9 @@ export default function MenuAndRecipesView({
   } | null>(null);
   const [rawCsvText, setRawCsvText] = useState<string>('');
   const [csvFileName, setCsvFileName] = useState<string>('');
+  const [importMode, setImportMode] = useState<'upload' | 'textbox'>('upload');
+  const [dragActive, setDragActive] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Mapping Input States
   const [activeMappingRawName, setActiveMappingRawName] = useState<string>('');
@@ -448,6 +452,7 @@ export default function MenuAndRecipesView({
     if (!item) return;
 
     try {
+      setLoading(true);
       const res = await fetch('/api/v1/sales/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -455,19 +460,37 @@ export default function MenuAndRecipesView({
           saleItemName: item.name,
           qtySold: parseInt(directSaleForm.quantity) || 1,
           date: new Date().toISOString().split('T')[0],
-          reference: `Venta Directa POS (${directSaleForm.tableNo})`
+          reference: `Venta Directa POS (${directSaleForm.tableNo || 'MESA GENERAL'})`,
+          products: products
         })
       });
       const data = await res.json();
+      setLoading(false);
+
       if (data.success) {
+        // Hydrate local storage store with updated states
+        if (data.updatedProducts) {
+          store.saveProducts(data.updatedProducts);
+        }
+        if (data.evalResult?.generatedMovements?.length > 0) {
+          const existingMovements = store.getMovements();
+          store.saveMovements([...data.evalResult.generatedMovements, ...existingMovements]);
+        }
+        if (data.evalResult?.generatedPortionMovements?.length > 0) {
+          const existingPortionMovements = store.getPortionMovements();
+          store.savePortionMovements([...data.evalResult.generatedPortionMovements, ...existingPortionMovements]);
+        }
+
         showToast('success', `Venta de ${directSaleForm.quantity} x "${item.name}" registrada con éxito.`);
         setShowDirectSaleModal(false);
-        onRefreshInventory(); // Refresh stock metrics in Sidebar/App
-        fetchMenuItems(); // Refresh price indicators
+        setDirectSaleForm({ menuItemId: '', quantity: '1', tableNo: 'Mesa 1', customerName: 'Cliente General' });
+        onRefreshInventory(); // Trigger parent reload
+        fetchMenuItems(); // Reload menu items with any new costs calculated
       } else {
         showToast('error', data.error || 'No se pudo procesar la venta.');
       }
     } catch (err) {
+      setLoading(false);
       showToast('error', 'Fallo de red al registrar venta');
     }
   };
@@ -475,35 +498,88 @@ export default function MenuAndRecipesView({
   // CSV Excel Sales Processing Simulation
   const handleProcessCsvUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rawCsvText.trim()) {
-      showToast('error', 'El cuadro de CSV está vacío.');
-      return;
+
+    let fileContentBase64 = '';
+    let currFileName = '';
+
+    if (importMode === 'upload') {
+      if (!selectedFile) {
+        showToast('error', 'Por favor, arrastra o selecciona un archivo primero.');
+        return;
+      }
+      currFileName = selectedFile.name;
+      
+      try {
+        fileContentBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.includes('base64,') ? result.split('base64,')[1] : result;
+            resolve(base64);
+          };
+          reader.onerror = () => reject(new Error('Fallo al leer archivo'));
+          reader.readAsDataURL(selectedFile);
+        });
+      } catch (err) {
+        showToast('error', 'No se pudo procesar el archivo seleccionado.');
+        return;
+      }
+    } else {
+      if (!rawCsvText.trim()) {
+        showToast('error', 'El cuadro de CSV está vacío.');
+        return;
+      }
+      currFileName = csvFileName || 'pos_import.csv';
+      try {
+        fileContentBase64 = btoa(unescape(encodeURIComponent(rawCsvText)));
+      } catch (err) {
+        showToast('error', 'Fallo al procesar el texto CSV ingresado.');
+        return;
+      }
     }
 
     try {
-      // Send raw lines to backend
+      setLoading(true);
       const res = await fetch('/api/v1/sales/import-and-deduct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filename: csvFileName || 'pos_import.csv',
-          rawCsv: rawCsvText
+          fileContent: fileContentBase64,
+          fileName: currFileName,
+          products: products,
+          movements: store.getMovements(),
+          portionMovements: store.getPortionMovements()
         })
       });
       const data = await res.json();
+      setLoading(false);
+      
       if (data.success) {
+        if (data.updatedProducts) {
+          store.saveProducts(data.updatedProducts);
+        }
+        if (data.updatedMovements) {
+          store.saveMovements(data.updatedMovements);
+        }
+        if (data.updatedPortionMovements) {
+          store.savePortionMovements(data.updatedPortionMovements);
+        }
+
         setUploadStats({
           processed: data.summary.processedCount || 0,
           unmapped: data.summary.unmappedCount || 0,
           movements: data.summary.deductedMovementsCount || 0
         });
+
         showToast('success', `Carga operada: ${data.summary.processedCount} procesados, ${data.summary.unmappedCount} pendientes de mapeo.`);
         fetchUnmatchedItems();
         onRefreshInventory();
+        setSelectedFile(null); // Clear selected file
       } else {
-        showToast('error', data.error || 'Fallo al procesar CSV');
+        showToast('error', data.error || 'Fallo al procesar archivo');
       }
     } catch (err) {
+      setLoading(false);
       showToast('error', 'Error al transmitir archivo de importación.');
     }
   };
@@ -517,16 +593,32 @@ export default function MenuAndRecipesView({
     }
 
     try {
+      setLoading(true);
       const res = await fetch('/api/v1/sales/map-item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawSalesName: activeMappingRawName,
-          menuItemId: mappingMenuItemId
+          menuItemId: mappingMenuItemId,
+          products: products,
+          movements: store.getMovements(),
+          portionMovements: store.getPortionMovements()
         })
       });
       const data = await res.json();
+      setLoading(false);
+
       if (data.success) {
+        if (data.updatedProducts) {
+          store.saveProducts(data.updatedProducts);
+        }
+        if (data.updatedMovements) {
+          store.saveMovements(data.updatedMovements);
+        }
+        if (data.updatedPortionMovements) {
+          store.savePortionMovements(data.updatedPortionMovements);
+        }
+
         showToast('success', `Mapeo grabado. Se corrigieron ${data.correctedCount} transacciones pasadas y se dedujeron sus ingredientes.`);
         setActiveMappingRawName('');
         setMappedMenuItemId('');
@@ -536,6 +628,7 @@ export default function MenuAndRecipesView({
         showToast('error', data.error || 'No se guardó el mapeo.');
       }
     } catch (err) {
+      setLoading(false);
       showToast('error', 'Fallo de comunicación en mapeo');
     }
   };
@@ -704,7 +797,7 @@ export default function MenuAndRecipesView({
           }`}
           id="tab-sales-connector"
         >
-          ⚙️ Importador de Ventas CSV
+          ⚙️ Importador de Ventas
         </button>
         <button
           onClick={() => { setActiveTab('mapping'); setSelectedItemForRecipe(null); }}
@@ -713,7 +806,7 @@ export default function MenuAndRecipesView({
           }`}
           id="tab-mapping-aliases"
         >
-          🔗 Mapeador de Equivalencias POS
+          🔗 Equivalencias POS
           {unmatchedItems.length > 0 && (
             <span className="px-1.5 py-0.2 text-[10px] bg-red-100 text-red-650 rounded font-bold animate-pulse">
               {unmatchedItems.length}
@@ -834,20 +927,26 @@ export default function MenuAndRecipesView({
 
                       {/* Calculated Financial Performance Dashboard */}
                       {item.requiresRecipe && (
-                        <div className="mt-4 pt-3.5 border-t border-slate-100 grid grid-cols-3 gap-2 bg-slate-50/50 p-2.5 rounded-2xl">
-                          <div className="text-center">
-                            <span className="block text-[9px] text-slate-400 font-sans">Precio Venta</span>
-                            <strong className="text-xs font-bold text-slate-800">RD$ {price.toLocaleString()}</strong>
+                        <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-x-3 gap-y-2.5 bg-slate-50/60 p-3 rounded-2xl">
+                          <div>
+                            <span className="block text-[9px] text-slate-400 font-sans tracking-wide">Precio Venta</span>
+                            <strong className="text-xs font-bold text-slate-800 font-mono">RD$ {price.toLocaleString()}</strong>
                           </div>
-                          <div className="text-center">
-                            <span className="block text-[9px] text-slate-400 font-sans">Costo Teórico</span>
-                            <strong className={`text-xs font-bold ${cost > price ? 'text-rose-600' : 'text-slate-800'}`}>
+                          <div>
+                            <span className="block text-[9px] text-slate-400 font-sans tracking-wide">Costo Teórico</span>
+                            <strong className={`text-xs font-bold font-mono ${cost > price ? 'text-rose-600' : 'text-slate-800'}`}>
                               RD$ {cost.toLocaleString()}
                             </strong>
                           </div>
-                          <div className="text-center">
-                            <span className="block text-[9px] text-slate-400 font-sans">Margen %</span>
-                            <strong className={`text-xs font-bold ${hasLowMargin ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          <div>
+                            <span className="block text-[9px] text-slate-400 font-sans tracking-wide">Margen Bruto</span>
+                            <strong className={`text-xs font-bold font-mono ${margin < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                              RD$ {margin.toLocaleString()}
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] text-slate-400 font-sans tracking-wide">Margen %</span>
+                            <strong className={`text-xs font-bold font-mono ${hasLowMargin ? 'text-amber-600' : 'text-emerald-650'}`}>
                               {marginPercent}%
                             </strong>
                           </div>
@@ -1290,50 +1389,152 @@ export default function MenuAndRecipesView({
               </p>
 
               <form onSubmit={handleProcessCsvUpload} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Nombre Identificador de Operaciones</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ventas_pos_sabado.csv"
-                    value={csvFileName}
-                    onChange={e => setCsvFileName(e.target.value)}
-                    className="w-full text-xs p-2.5 border border-slate-200 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Pegue las Líneas CSV o Datos del POS</label>
-                  <textarea
-                    rows={8}
-                    placeholder="Formato requerido: saleItemName, qtySold, unitPrice, date, reference&#10;ejemplo:&#10;Hamburguesa Clásica, 10, 450, 2026-06-09, Factura POS-102&#10;Pechuga al Grill, 5, 380, 2026-06-09, Factura POS-103&#10;Mofongo Dominicano, 3, 550, 2026-06-09, Factura POS-104"
-                    value={rawCsvText}
-                    onChange={e => setRawCsvText(e.target.value)}
-                    className="w-full font-mono text-xs p-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-orange-500/10 focus:border-orange-500"
-                    id="sales-csv-textarea"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setRawCsvText(`saleItemName, qtySold, unitPrice, date, reference
+                    onClick={() => setImportMode('upload')}
+                    className={`py-1.5 px-3 rounded-lg text-[11px] font-bold transition ${
+                      importMode === 'upload'
+                        ? 'bg-orange-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    📁 Subir archivo (Excel/CSV)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('textbox')}
+                    className={`py-1.5 px-3 rounded-lg text-[11px] font-bold transition ${
+                      importMode === 'textbox'
+                        ? 'bg-orange-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    📝 Pegar datos CSV
+                  </button>
+                </div>
+
+                {importMode === 'upload' ? (
+                  <div className="space-y-3">
+                    <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Archivo de Origen</label>
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        setDragActive(false);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragActive(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          setSelectedFile(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      onClick={() => document.getElementById('sales-file-input')?.click()}
+                      className={`border-2 border-dashed rounded-2xl p-8 text-center transition cursor-pointer flex flex-col items-center justify-center gap-3 ${
+                        dragActive
+                          ? 'border-orange-500 bg-orange-50/20'
+                          : selectedFile
+                          ? 'border-emerald-500 bg-emerald-50/5'
+                          : 'border-slate-200 hover:border-slate-350 bg-slate-50/50'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        id="sales-file-input"
+                        className="hidden"
+                        accept=".csv, .xlsx, .xls"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setSelectedFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                      <div className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl shadow-sm">
+                        📁
+                      </div>
+                      {selectedFile ? (
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">Archivo seleccionado:</p>
+                          <p className="font-mono text-[11px] text-emerald-600 font-semibold mt-1">
+                            {selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)
+                          </p>
+                          <span className="block text-[10px] text-slate-400 mt-2 hover:underline">
+                            Haga clic o arrastre otro archivo para cambiarlo
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="font-bold text-slate-800 text-xs">
+                            Arrastra y suelta tu archivo de ventas aquí
+                          </p>
+                          <p className="text-[11px] text-slate-450 mt-1 max-w-xs mx-auto">
+                            Soporta formatos **.xlsx, .xls** de Excel o archivos planos **.csv** exportados por su POS.
+                          </p>
+                          <span className="inline-block mt-3 px-3 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-[10px] font-bold text-slate-650 rounded-lg">
+                            Seleccionar Archivo
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Nombre Identificador de Operaciones</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. ventas_pos_sabado.csv"
+                        value={csvFileName}
+                        onChange={e => setCsvFileName(e.target.value)}
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-xl outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Pegue las Líneas CSV o Datos del POS</label>
+                      <textarea
+                        rows={6}
+                        placeholder="Formato requerido: saleItemName, qtySold, unitPrice, date, reference&#10;ejemplo:&#10;Hamburguesa Clásica, 10, 450, 2026-06-09, Factura POS-102&#10;Pechuga al Grill, 5, 380, 2026-06-09, Factura POS-103&#10;Mofongo Dominicano, 3, 550, 2026-06-09, Factura POS-104"
+                        value={rawCsvText}
+                        onChange={e => setRawCsvText(e.target.value)}
+                        className="w-full font-mono text-xs p-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-orange-500/10 focus:border-orange-500"
+                        id="sales-csv-textarea"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+                  <div>
+                    {importMode === 'textbox' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRawCsvText(`saleItemName, qtySold, unitPrice, date, reference
 Hamburguesa Clásica, 15, 450, ${new Date().toISOString().split('T')[0]}, POS-SABADO-1
 Pechuga de Pollo al Grill, 8, 380, ${new Date().toISOString().split('T')[0]}, POS-SABADO-2
 Mofongo Dominicano, 12, 590, ${new Date().toISOString().split('T')[0]}, POS-SABADO-3
 HAMB_CL_S, 4, 450, ${new Date().toISOString().split('T')[0]}, POS-SABADO-4`);
-                      setCsvFileName('ventas_muestras_dominicanas.csv');
-                    }}
-                    className="text-xs text-orange-600 hover:underline font-bold"
-                  >
-                    💡 Cargar Muestra Dominicana
-                  </button>
+                          setCsvFileName('ventas_muestras_dominicanas.csv');
+                          showToast('info', 'Líneas de prueba cargadas correctamente.');
+                        }}
+                        className="text-xs text-orange-600 hover:underline font-bold"
+                      >
+                        💡 Cargar Muestra Dominicana
+                      </button>
+                    )}
+                  </div>
                   <button
                     type="submit"
-                    className="py-2.5 px-6 bg-slate-850 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition flex items-center gap-2"
+                    disabled={loading}
+                    className="py-2.5 px-6 bg-slate-850 hover:bg-slate-900 disabled:bg-slate-400 text-white rounded-xl text-xs font-bold transition flex items-center gap-2"
                   >
                     <Upload className="w-4 h-4" />
-                    Procesar y Descontar Inventario
+                    {loading ? 'Procesando...' : 'Procesar y Descontar Inventario'}
                   </button>
                 </div>
               </form>

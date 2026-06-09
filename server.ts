@@ -1890,7 +1890,8 @@ function getComboItems(): any[] {
 
 // Categories
 app.get("/api/v1/menu/categories", (req, res) => {
-  res.status(200).json({ success: true, data: getMenuCategories() });
+  const cats = getMenuCategories();
+  res.status(200).json({ success: true, data: cats, categories: cats });
 });
 
 app.post("/api/v1/menu/categories", (req, res) => {
@@ -1928,7 +1929,7 @@ app.get("/api/v1/menu/items", (req, res) => {
     };
   });
 
-  res.status(200).json({ success: true, data: itemsWithCost });
+  res.status(200).json({ success: true, data: itemsWithCost, items: itemsWithCost });
 });
 
 app.post("/api/v1/menu/items", (req, res) => {
@@ -2004,7 +2005,14 @@ app.get("/api/v1/menu/items/:id/recipe", (req, res) => {
     : activeRecipe || recipes.find(r => r.menuItemId === req.params.id);
 
   if (!targetRecipe) {
-    return res.status(200).json({ success: true, recipe: null, ingredients: [], allVersions: recipes.filter(r => r.menuItemId === req.params.id) });
+    return res.status(200).json({
+      success: true,
+      recipe: null,
+      activeRecipe: null,
+      ingredients: [],
+      allVersions: recipes.filter(r => r.menuItemId === req.params.id),
+      versions: recipes.filter(r => r.menuItemId === req.params.id)
+    });
   }
 
   const ingredients = getRecipeIngredients().filter(ing => ing.recipeId === targetRecipe.id);
@@ -2013,9 +2021,99 @@ app.get("/api/v1/menu/items/:id/recipe", (req, res) => {
   res.status(200).json({
     success: true,
     recipe: targetRecipe,
+    activeRecipe: targetRecipe,
     ingredients,
-    allVersions
+    allVersions,
+    versions: allVersions
   });
+});
+
+app.post("/api/v1/menu/items/:id/recipe/ingredients", (req, res) => {
+  const { recipeId, productId, portionProductId, quantity, unitId, wastePercentage, costUnit, deductionType, isOptional, notes } = req.body;
+  
+  if (!recipeId) {
+    return res.status(400).json({ success: false, error: "recipeId es requerido de forma mandatoria." });
+  }
+
+  const recipes = getRecipes();
+  const recipeIdx = recipes.findIndex(r => r.id === recipeId);
+  if (recipeIdx === -1) return res.status(404).json({ success: false, error: "Receta/Ficha Técnica no encontrada." });
+
+  const ingredients = getRecipeIngredients();
+  const qty = Number(quantity || 0);
+  const cost = Number(costUnit || 0);
+  const waste = Number(wastePercentage || 0);
+  const totalCost = qty * cost * (1 + waste / 100);
+
+  const newIng = {
+    id: "ing-" + Math.random().toString(36).substr(2, 9),
+    recipeId,
+    productId: productId || null,
+    portionProductId: portionProductId || null,
+    quantity: qty,
+    unitId: unitId || "und",
+    wastePercentage: waste,
+    costUnit: cost,
+    totalCost: Math.round(totalCost * 100) / 100,
+    deductionType: deductionType || "UNIT",
+    isOptional: isOptional === true,
+    notes: notes || "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  ingredients.push(newIng);
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredients);
+
+  // Recalculate recipe theoretical cost
+  const recipeIngs = ingredients.filter(i => i.recipeId === recipeId);
+  const sumCost = recipeIngs.reduce((acc, i) => acc + i.totalCost, 0);
+
+  const item = getMenuItems().find(menu => menu.id === recipes[recipeIdx].menuItemId);
+  const salePrice = item ? item.salePrice : 1;
+  const foodCostPercentage = Math.round((sumCost / salePrice) * 100 * 10) / 10;
+
+  recipes[recipeIdx].theoreticalCost = Math.round(sumCost * 100) / 100;
+  recipes[recipeIdx].foodCostPercentage = foodCostPercentage;
+  recipes[recipeIdx].updatedAt = new Date().toISOString();
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+
+  res.status(201).json({ success: true, data: newIng, recipe: recipes[recipeIdx] });
+});
+
+app.delete("/api/v1/menu/items/:id/recipe/ingredients", (req, res) => {
+  const { ingredientId, recipeId } = req.body;
+  if (!ingredientId || !recipeId) {
+    return res.status(400).json({ success: false, error: "ingredientId y recipeId son requeridos en el cuerpo." });
+  }
+
+  const ingredients = getRecipeIngredients();
+  const initialLen = ingredients.length;
+  const updatedIngs = ingredients.filter(i => !(i.id === ingredientId && i.recipeId === recipeId));
+  
+  if (updatedIngs.length === initialLen) {
+    return res.status(404).json({ success: false, error: "Ingrediente no encontrado." });
+  }
+
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, updatedIngs);
+
+  // Recalculate cost
+  const recipes = getRecipes();
+  const recipeIdx = recipes.findIndex(r => r.id === recipeId);
+  if (recipeIdx !== -1) {
+    const sumCost = updatedIngs.filter(i => i.recipeId === recipeId).reduce((acc, i) => acc + i.totalCost, 0);
+    const item = getMenuItems().find(menu => menu.id === recipes[recipeIdx].menuItemId);
+    const salePrice = item ? item.salePrice : 1;
+    const foodCostPercentage = Math.round((sumCost / salePrice) * 100 * 10) / 10;
+
+    recipes[recipeIdx].theoreticalCost = Math.round(sumCost * 100) / 100;
+    recipes[recipeIdx].foodCostPercentage = foodCostPercentage;
+    recipes[recipeIdx].updatedAt = new Date().toISOString();
+    writeJsonFile(DB_PATHS.RECIPES, recipes);
+  }
+
+  res.status(200).json({ success: true, message: "Ingrediente eliminado.", recipe: recipeIdx !== -1 ? recipes[recipeIdx] : null });
 });
 
 app.post("/api/v1/menu/items/:id/recipe", (req, res) => {
@@ -2293,7 +2391,7 @@ app.patch("/api/v1/menu-aliases/:id", (req, res) => {
 });
 
 // Combos
-app.get("/api/v1/combos", (req, res) => {
+app.get(["/api/v1/combos", "/api/v1/menu/combos"], (req, res) => {
   const combos = getCombos();
   const comboItems = getComboItems();
   const items = getMenuItems();
@@ -2312,10 +2410,10 @@ app.get("/api/v1/combos", (req, res) => {
       items: childs
     };
   });
-  res.status(200).json({ success: true, data: details });
+  res.status(200).json({ success: true, data: details, combos: details });
 });
 
-app.post("/api/v1/combos", (req, res) => {
+app.post(["/api/v1/combos", "/api/v1/menu/combos"], (req, res) => {
   const { name, salePrice, items = [] } = req.body;
   if (!name || salePrice === undefined) {
     return res.status(400).json({ success: false, error: "Nombre del combo y precio son requeridos." });
@@ -2852,7 +2950,7 @@ app.get("/api/v1/sales/unmatched-items", (req, res) => {
       }
     });
 
-    res.status(200).json({ success: true, count: Object.keys(grouped).length, data: Object.values(grouped) });
+    res.status(200).json({ success: true, count: Object.keys(grouped).length, data: Object.values(grouped), unmatchedItems: Object.values(grouped) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
