@@ -539,7 +539,7 @@ export const store = {
         const prevAreaStock = areaStocks[receptionArea] || 0;
         areaStocks[receptionArea] = prevAreaStock + addedQty;
 
-        const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+        const newStock: number = Object.values(areaStocks).reduce((a: number, b: any) => a + Number(b || 0), 0) as number;
 
         // Calc new Average Cost: (Old Stock * Old Average Cost + New Qty * New Unit Price) / (Old Stock + New Qty)
         let newAvgCost = product.averageCost;

@@ -83,7 +83,7 @@ export interface Product {
   };
 }
 
-export type KitchenRequestStatus = 'Borrador' | 'Enviada' | 'Aprobada' | 'Rechazada' | 'Parcialmente entregada' | 'Entregada' | 'Procesada' | 'Cerrada' | 'Convertida';
+export type KitchenRequestStatus = 'Borrador' | 'Enviada' | 'Pendiente' | 'Aprobada' | 'Rechazada' | 'Parcialmente entregada' | 'Entregada' | 'Procesada' | 'Cerrada' | 'Convertida';
 
 export interface KitchenRequestItem {
   productId: string;
