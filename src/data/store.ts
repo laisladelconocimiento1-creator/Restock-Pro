@@ -228,7 +228,99 @@ export const store = {
 
   // Products
   getProducts(): Product[] {
-    return getLocalStorageItem<Product[]>(KEYS.PRODUCTS, mockProducts);
+    const raw = getLocalStorageItem<Product[]>(KEYS.PRODUCTS, mockProducts);
+    let changed = false;
+    const filled = raw.map(p => {
+      let isLocalChanged = false;
+      
+      if (p.requiresPortioning === undefined) {
+        p.requiresPortioning = p.id === 'prod-1' || p.name.toLowerCase().includes('pollo') || p.name.toLowerCase().includes('res') || p.name.toLowerCase().includes('salmón') || p.portionsAvailable !== undefined;
+        isLocalChanged = true;
+      }
+      if (p.requiresProcessing === undefined) {
+        p.requiresProcessing = false;
+        isLocalChanged = true;
+      }
+      if (p.isConsumedDirect === undefined) {
+        p.isConsumedDirect = !p.requiresPortioning;
+        isLocalChanged = true;
+      }
+      if (p.isUsedInRecipes === undefined) {
+        p.isUsedInRecipes = true;
+        isLocalChanged = true;
+      }
+      if (p.purchaseUnitId === undefined) {
+        p.purchaseUnitId = p.unitId;
+        isLocalChanged = true;
+      }
+      if (p.baseUnitId === undefined) {
+        p.baseUnitId = p.unitId;
+        isLocalChanged = true;
+      }
+      if (p.operationalUnitId === undefined) {
+        p.operationalUnitId = p.unitId;
+        isLocalChanged = true;
+      }
+      if (p.portionSize === undefined) {
+        p.portionSize = p.id === 'prod-1' ? 8 : 0;
+        isLocalChanged = true;
+      }
+      if (p.expectedYield === undefined) {
+        p.expectedYield = 100;
+        isLocalChanged = true;
+      }
+      if (p.expectedWaste === undefined) {
+        p.expectedWaste = 0;
+        isLocalChanged = true;
+      }
+      if (p.initialReceptionArea === undefined) {
+        if (p.categoryId === 'cat-1' || p.categoryId === 'cat-3' || p.name.toLowerCase().includes('pollo') || p.name.toLowerCase().includes('res') || p.name.toLowerCase().includes('pescado') || p.name.toLowerCase().includes('salmón')) {
+          p.initialReceptionArea = 'Refrigerados';
+        } else {
+          p.initialReceptionArea = 'Almacén seco';
+        }
+        isLocalChanged = true;
+      }
+      if (p.habitualDestinationArea === undefined) {
+        p.habitualDestinationArea = 'Cocina';
+        isLocalChanged = true;
+      }
+      if (p.minStockWarehouse === undefined) {
+        p.minStockWarehouse = p.minStock;
+        isLocalChanged = true;
+      }
+      if (p.minStockKitchen === undefined) {
+        p.minStockKitchen = Math.ceil(p.minStock * 0.3);
+        isLocalChanged = true;
+      }
+
+      if (!p.areaStocks) {
+        p.areaStocks = {
+          'Almacén seco': 0,
+          'Refrigerados': 0,
+          'Congelados': 0,
+          'Cocina': 0,
+          'Área de procesamiento': 0,
+          'Bar': 0,
+          'Desechables': 0,
+          'Limpieza': 0,
+          'Otro': 0
+        };
+        const targetArea = p.initialReceptionArea || 'Almacén seco';
+        p.areaStocks[targetArea] = p.currentStock;
+        isLocalChanged = true;
+      }
+      
+      if (isLocalChanged) {
+        changed = true;
+      }
+      return p;
+    });
+
+    if (changed) {
+      setLocalStorageItem(KEYS.PRODUCTS, filled);
+    }
+    return filled;
   },
   saveProducts(products: Product[]): void {
     setLocalStorageItem(KEYS.PRODUCTS, products);
@@ -269,6 +361,7 @@ export const store = {
     this.addAuditLog('CREACIÓN_SOLICITUD', 'Solicitudes', `Creada solicitud ${req.code} (${req.status})`, req.id);
   },
   updateKitchenRequest(updated: KitchenRequest): void {
+    const original = this.getKitchenRequests().find(r => r.id === updated.id);
     const list = this.getKitchenRequests().map(r => r.id === updated.id ? updated : r);
     setLocalStorageItem(KEYS.KITCHEN_REQUESTS, list);
 
@@ -278,6 +371,122 @@ export const store = {
       `Solicitud ${updated.code} cambió a ${updated.status}${updated.reason ? '. Motivo: ' + updated.reason : ''}`,
       updated.id
     );
+
+    // If transitioned to 'Entregada', process inventory TRANSFER and trigger PortionBatch creation
+    if (original && original.status !== 'Entregada' && updated.status === 'Entregada') {
+      const products = this.getProducts();
+
+      updated.items.forEach(item => {
+        const productIndex = products.findIndex(p => p.id === item.productId);
+        if (productIndex !== -1) {
+          const product = products[productIndex];
+          const prevStock = product.currentStock; // General total stock remains unchanged by a transfer
+          
+          const sourceArea = product.initialReceptionArea || 'Almacén seco';
+          const destinationArea = updated.requestingArea || product.habitualDestinationArea || 'Cocina';
+          const qty = item.qty;
+
+          const areaStocks = { ...(product.areaStocks || {}) };
+          
+          // Transfer quantities
+          const prevSourceStock = areaStocks[sourceArea] || 0;
+          const prevDestStock = areaStocks[destinationArea] || 0;
+
+          areaStocks[sourceArea] = prevSourceStock - qty;
+          areaStocks[destinationArea] = prevDestStock + qty;
+
+          // Re-calculate the sum as currentStock (should stay equal to prevStock unless adjusted, but ensures integrity)
+          const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+          products[productIndex] = {
+            ...product,
+            currentStock: newStock,
+            areaStocks: areaStocks
+          };
+
+          // 1. Log Salida/Exit from Almacén Area
+          this.addMovement({
+            id: 'mov-' + Math.random().toString(36).substr(2, 9),
+            productId: product.id,
+            productName: product.name,
+            qty: -qty,
+            unitCode: this.getUnitCode(product.unitId),
+            type: 'Salida',
+            quantityBefore: prevStock,
+            quantityAfter: Math.max(0, prevStock - qty), // logical view decrement
+            area: sourceArea,
+            userId: updated.approvedById || 'user-anon',
+            userName: updated.approvedByName || 'Administrador',
+            date: new Date().toISOString(),
+            reason: `Transferencia (Requisición ${updated.code})`,
+            comment: `Salida de almacén para surtir cocina. Cantidad: ${qty} ${this.getUnitCode(product.unitId)}`,
+            documentRelatedId: updated.id
+          });
+
+          // 2. Log Entrada/Entry into Kitchen Area
+          this.addMovement({
+            id: 'mov-' + Math.random().toString(36).substr(2, 9),
+            productId: product.id,
+            productName: product.name,
+            qty: qty,
+            unitCode: this.getUnitCode(product.unitId),
+            type: 'Entrada',
+            quantityBefore: Math.max(0, prevStock - qty), // logical view after exit
+            quantityAfter: prevStock,
+            area: destinationArea,
+            userId: updated.creatorId,
+            userName: updated.creatorName,
+            date: new Date().toISOString(),
+            reason: `Recepción Suministro (Requisición ${updated.code})`,
+            comment: `Ingreso de mercancía al inventario operativo de la cocina.`,
+            documentRelatedId: updated.id
+          });
+
+          // 3. Auto-spawn PortionBatch kitchen task if product has registered portion rules
+          if (product.requiresPortioning) {
+            const rules = this.getPortionRules();
+            const rule = rules.find(r => r.productId === product.id && r.isActive);
+            if (rule) {
+              const baseQuantity = qty * rule.conversionFactor;
+              const theoreticalPortions = (baseQuantity * (rule.expectedYieldPercentage / 100)) / rule.standardPortionSize;
+              const totalCost = qty * product.averageCost;
+              const estimatedCostPerPortion = theoreticalPortions > 0 ? totalCost / theoreticalPortions : 0;
+
+              this.addPortionBatch({
+                id: 'lote-' + Math.random().toString(36).substr(2, 9),
+                productId: product.id,
+                quantityPurchased: qty,
+                purchaseUnit: this.getUnitCode(product.unitId),
+                baseQuantity,
+                baseUnit: this.getUnitCode(rule.baseUnitId),
+                standardPortionSize: rule.standardPortionSize,
+                theoreticalPortions: Math.round(theoreticalPortions * 10) / 10,
+                realPortions: 0,
+                differencePortions: 0,
+                expectedYieldPercentage: rule.expectedYieldPercentage,
+                realYieldPercentage: 0,
+                totalCost,
+                estimatedCostPerPortion: Math.round(estimatedCostPerPortion * 100) / 100,
+                realCostPerPortion: 0,
+                status: 'PENDING',
+                responsibleUserId: updated.creatorId,
+                createdAt: new Date().toISOString()
+              });
+
+              this.addAuditLog(
+                'LOTE_PROGRAMADO_KITCHEN',
+                'Porcionamiento',
+                `Se programó automáticamente lote de porcionamiento por entrega de requisición ${updated.code} para ${product.name}`,
+                product.id
+              );
+            }
+          }
+        }
+      });
+
+      // Save updated products list
+      setLocalStorageItem(KEYS.PRODUCTS, products);
+    }
   },
 
   // Purchases
@@ -324,7 +533,13 @@ export const store = {
         const product = products[productIndex];
         const prevStock = product.currentStock;
         const addedQty = item.qty;
-        const newStock = prevStock + addedQty;
+
+        const receptionArea = product.initialReceptionArea || 'Almacén seco';
+        const areaStocks = { ...(product.areaStocks || {}) };
+        const prevAreaStock = areaStocks[receptionArea] || 0;
+        areaStocks[receptionArea] = prevAreaStock + addedQty;
+
+        const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
 
         // Calc new Average Cost: (Old Stock * Old Average Cost + New Qty * New Unit Price) / (Old Stock + New Qty)
         let newAvgCost = product.averageCost;
@@ -338,7 +553,8 @@ export const store = {
           ...product,
           currentStock: newStock,
           averageCost: newAvgCost,
-          lastPrice: item.unitPrice
+          lastPrice: item.unitPrice,
+          areaStocks: areaStocks
         };
 
         // Update list
@@ -354,46 +570,14 @@ export const store = {
           type: 'Entrada',
           quantityBefore: prevStock,
           quantityAfter: newStock,
-          area: 'Almacén seco', // Default area of reception
+          area: receptionArea,
           userId: currentUser.id,
           userName: currentUser.name,
           date: new Date().toISOString(),
           reason: `Compra RECIBIDA (${purchase.invoiceNumber})`,
-          comment: `Código de Orden: ${purchase.code}. Costo unitario: $${item.unitPrice}`,
+          comment: `Código de Orden: ${purchase.code}. Costo unitario: $${item.unitPrice}. Recibida en área: ${receptionArea}`,
           documentRelatedId: purchase.id
         });
-
-        // Auto-spawn PortionBatch kitchen task if product has registered portion rules
-        const rules = this.getPortionRules();
-        const rule = rules.find(r => r.productId === product.id && r.isActive && r.requiresPortioning);
-        if (rule) {
-          const baseQuantity = addedQty * rule.conversionFactor;
-          const theoreticalPortions = (baseQuantity * (rule.expectedYieldPercentage / 100)) / rule.standardPortionSize;
-          const totalCost = addedQty * item.unitPrice;
-          const estimatedCostPerPortion = theoreticalPortions > 0 ? totalCost / theoreticalPortions : 0;
-
-          this.addPortionBatch({
-            id: 'lote-' + Math.random().toString(36).substr(2, 9),
-            purchaseId: purchase.id,
-            productId: product.id,
-            quantityPurchased: addedQty,
-            purchaseUnit: this.getUnitCode(product.unitId),
-            baseQuantity,
-            baseUnit: this.getUnitCode(rule.baseUnitId),
-            standardPortionSize: rule.standardPortionSize,
-            theoreticalPortions: Math.round(theoreticalPortions * 10) / 10,
-            realPortions: 0,
-            differencePortions: 0,
-            expectedYieldPercentage: rule.expectedYieldPercentage,
-            realYieldPercentage: 0,
-            totalCost,
-            estimatedCostPerPortion: Math.round(estimatedCostPerPortion * 100) / 100,
-            realCostPerPortion: 0,
-            status: 'PENDING',
-            responsibleUserId: currentUser.id,
-            createdAt: new Date().toISOString()
-          });
-        }
       }
     });
 
@@ -717,7 +901,15 @@ export const store = {
       if (productIndex !== -1) {
         const product = products[productIndex];
         const prevStock = product.currentStock;
-        const newStock = Math.max(0, prevStock - batch.quantityPurchased);
+
+        // Discount from kitchen or processing area
+        const discountArea = (product.habitualDestinationArea || 'Cocina') as InventoryArea;
+        const areaStocks = { ...(product.areaStocks || {}) };
+        const prevAreaStock = areaStocks[discountArea] || 0;
+        areaStocks[discountArea] = Math.max(0, prevAreaStock - batch.quantityPurchased);
+
+        // Calculate general sum currentStock
+        const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
 
         // Update product stock and portions stock
         const prevPortions = product.portionsAvailable || 0;
@@ -726,7 +918,8 @@ export const store = {
         products[productIndex] = {
           ...product,
           currentStock: newStock,
-          portionsAvailable: newPortions
+          portionsAvailable: newPortions,
+          areaStocks: areaStocks
         };
         setLocalStorageItem(KEYS.PRODUCTS, products);
 
@@ -740,12 +933,12 @@ export const store = {
           type: 'Salida',
           quantityBefore: prevStock,
           quantityAfter: newStock,
-          area: 'Cocina',
+          area: discountArea,
           userId: approvedByUserId,
           userName: approvedByUserName,
           date: new Date().toISOString(),
           reason: `Descuento de materia prima por porcionado (${batch.id})`,
-          comment: `Se procesaron ${batch.quantityPurchased} ${batch.purchaseUnit} para producir porciones listas para cocina/venta.`,
+          comment: `Se procesaron ${batch.quantityPurchased} ${batch.purchaseUnit} desde ${discountArea} para producir ${batch.realPortions} porciones.`,
           documentRelatedId: batch.id
         });
 
@@ -942,6 +1135,7 @@ export const store = {
     if (!recipe) return;
 
     const currentUser = this.getCurrentUser();
+    const productsList = this.getProducts();
 
     recipe.ingredients.forEach(ing => {
       const totalQty = ing.quantity * quantitySold;
@@ -962,18 +1156,23 @@ export const store = {
         });
       } else {
         // Deduct from raw stock currentStock
-        const products = this.getProducts();
-        const index = products.findIndex(p => p.id === ing.productId);
+        const index = productsList.findIndex(p => p.id === ing.productId);
         if (index !== -1) {
-          const product = products[index];
+          const product = productsList[index];
           const prevStock = product.currentStock;
-          const newStock = Math.max(0, prevStock - totalQty);
 
-          products[index] = {
+          // Deduct from Cocina area of that product
+          const areaStocks = { ...(product.areaStocks || {}) };
+          const prevAreaStock = areaStocks['Cocina'] || 0;
+          areaStocks['Cocina'] = Math.max(0, prevAreaStock - totalQty);
+
+          const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+          productsList[index] = {
             ...product,
-            currentStock: newStock
+            currentStock: newStock,
+            areaStocks: areaStocks
           };
-          setLocalStorageItem(KEYS.PRODUCTS, products);
 
           this.addMovement({
             id: 'mov-' + Math.random().toString(36).substr(2, 9),
@@ -994,6 +1193,9 @@ export const store = {
         }
       }
     });
+
+    // Save final list after potential modifications
+    setLocalStorageItem(KEYS.PRODUCTS, productsList);
 
     this.addAuditLog(
       'VENTA_RECETA',

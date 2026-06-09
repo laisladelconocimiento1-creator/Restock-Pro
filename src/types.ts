@@ -53,9 +53,37 @@ export interface Product {
   description: string;
   providerIds: string[]; // Provider IDs
   portionsAvailable?: number; // Portions stock tracker
+
+  // Advanced operational parameters
+  requiresPortioning?: boolean;
+  requiresProcessing?: boolean;
+  isConsumedDirect?: boolean;
+  isUsedInRecipes?: boolean;
+  purchaseUnitId?: string;
+  baseUnitId?: string;
+  operationalUnitId?: string;
+  portionSize?: number;
+  expectedYield?: number;
+  expectedWaste?: number;
+  initialReceptionArea?: InventoryArea;
+  habitualDestinationArea?: InventoryArea;
+  minStockWarehouse?: number;
+  minStockKitchen?: number;
+
+  areaStocks?: {
+    'Almacén seco'?: number;
+    'Refrigerados'?: number;
+    'Congelados'?: number;
+    'Cocina'?: number;
+    'Área de procesamiento'?: number;
+    'Bar'?: number;
+    'Desechables'?: number;
+    'Limpieza'?: number;
+    'Otro'?: number;
+  };
 }
 
-export type KitchenRequestStatus = 'Borrador' | 'Pendiente' | 'Aprobada' | 'Rechazada' | 'Convertida';
+export type KitchenRequestStatus = 'Borrador' | 'Enviada' | 'Aprobada' | 'Rechazada' | 'Parcialmente entregada' | 'Entregada' | 'Procesada' | 'Cerrada' | 'Convertida';
 
 export interface KitchenRequestItem {
   productId: string;
@@ -75,6 +103,9 @@ export interface KitchenRequest {
   approvedById?: string;
   approvedByName?: string;
   notes?: string;
+  requestingArea?: InventoryArea;
+  motif?: 'Porcionamiento' | 'Producción' | 'Mise en place' | 'Servicio' | 'Reposición' | 'Evento' | 'Emergencia' | 'Otro';
+  priority?: 'Baja' | 'Media' | 'Alta' | 'Urgente';
 }
 
 export type PurchaseStatus = 'Pendiente' | 'Recibida' | 'Anulada' | 'Observada';
@@ -121,6 +152,7 @@ export type InventoryArea =
   | 'Congelados'
   | 'Limpieza'
   | 'Desechables'
+  | 'Área de procesamiento'
   | 'Otro';
 
 export type MovementType = 'Entrada' | 'Salida' | 'Transferencia' | 'Ajuste' | 'Merma' | 'Devolución' | 'INITIAL_STOCK';

@@ -95,9 +95,10 @@ export default function ExistenciasTab({
                           (p as any).sku?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || p.categoryId === selectedCategory;
     
-    // Simulating location/area. Look for clues or defaults
-    const areaVal = (p as any).area_almacen || 'Almacén general';
-    const matchesArea = selectedArea === 'all' || areaVal.toLowerCase() === selectedArea.toLowerCase();
+    // Check if designated area or product holds stock there
+    const matchesArea = selectedArea === 'all' || 
+                        p.initialReceptionArea?.toLowerCase() === selectedArea.toLowerCase() ||
+                        (p.areaStocks && (p.areaStocks[selectedArea as any] || 0) > 0);
 
     const status = getStockStatus(p);
     let matchesStatus = true;
@@ -235,7 +236,6 @@ export default function ExistenciasTab({
                 {filteredProducts.map((p) => {
                   const status = getStockStatus(p);
                   const totalValue = p.currentStock * p.averageCost;
-                  const areaVal = (p as any).area_almacen || 'Almacén general';
                   return (
                     <tr
                       key={p.id}
@@ -249,7 +249,12 @@ export default function ExistenciasTab({
                         </div>
                       </td>
                       <td className="p-4 text-slate-600 font-medium">{getCategoryName(p.categoryId)}</td>
-                      <td className="p-4 text-slate-500 font-semibold">{areaVal}</td>
+                      <td className="p-4 text-slate-500 font-semibold">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-slate-800 font-medium">{p.initialReceptionArea || 'Almacén seco'}</span>
+                          <span className="text-[10px] text-slate-400">Destino: {p.habitualDestinationArea || 'Cocina'}</span>
+                        </div>
+                      </td>
                       <td className="p-4 text-right font-mono text-slate-800 font-bold">
                         {p.currentStock.toLocaleString('es-DO', { minimumFractionDigits: 1 })} <span className="text-[10px] text-slate-400 font-normal">{getUnitCode(p.unitId)}</span>
                       </td>
@@ -379,6 +384,28 @@ export default function ExistenciasTab({
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Máximo de Capacidad</span>
                   <p className="font-mono font-medium text-slate-700">{selectedProduct.maxStock} {getUnitCode(selectedProduct.unitId)}</p>
+                </div>
+              </div>
+
+              {/* STOCK BY AREA DISTRIBUTION BREAKDOWN */}
+              <div className="bg-slate-100/70 border border-slate-200 rounded-xl p-3 space-y-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Distribución por Área</span>
+                <div className="space-y-1.5 divide-y divide-slate-200/50">
+                  {Object.entries(selectedProduct.areaStocks || {}).map(([areaName, qty]) => {
+                    const stockQty = qty as number;
+                    if (stockQty <= 0) return null;
+                    return (
+                      <div key={areaName} className="flex justify-between items-center text-[11px] pt-1.5 first:pt-0">
+                        <span className="text-slate-600 font-medium">{areaName}</span>
+                        <span className="font-mono text-slate-800 font-bold">
+                          {stockQty.toLocaleString('es-DO', { minimumFractionDigits: 1 })} <span className="text-[9px] text-slate-400 font-normal">{getUnitCode(selectedProduct.unitId)}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {Object.values(selectedProduct.areaStocks || {}).every(qty => (qty as number) <= 0) && (
+                    <p className="text-[10px] text-slate-400 italic">Sin existencia registrada en ninguna ubicación.</p>
+                  )}
                 </div>
               </div>
 

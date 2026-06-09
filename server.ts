@@ -2607,8 +2607,15 @@ function evaluateDeductions(
       const fallbackProd = productsList.find(p => p.name.toLowerCase().trim() === cleanName);
       if (fallbackProd) {
         const prevStock = fallbackProd.currentStock;
-        const finalStock = Math.max(0, prevStock - multiplier);
+
+        // Deduct from Cocina area
+        const areaStocks = { ...(fallbackProd.areaStocks || {}) };
+        const prevAreaStock = areaStocks["Cocina"] || 0;
+        areaStocks["Cocina"] = Math.max(0, prevAreaStock - multiplier);
+        const finalStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
         fallbackProd.currentStock = finalStock;
+        fallbackProd.areaStocks = areaStocks;
         theoreticalCostSum += fallbackProd.averageCost * multiplier;
 
         generatedMovements.push({
@@ -2665,8 +2672,15 @@ function evaluateDeductions(
         } else {
           // Normal raw stock deduction
           const prevStock = prod.currentStock;
-          const newStock = Math.max(0, prevStock - deductionQty);
+
+          // Deduct from Cocina area
+          const areaStocks = { ...(prod.areaStocks || {}) };
+          const prevAreaStock = areaStocks["Cocina"] || 0;
+          areaStocks["Cocina"] = Math.max(0, prevAreaStock - deductionQty);
+          const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
           productsList[pIdx].currentStock = newStock;
+          productsList[pIdx].areaStocks = areaStocks;
 
           generatedMovements.push({
             id: "mov-" + Math.random().toString(36).substr(2, 9),
@@ -2923,6 +2937,16 @@ app.post("/api/v1/sales/import-and-deduct", (req, res) => {
   } catch (err: any) {
     console.error("XLSX parsing failed:", err);
     res.status(500).json({ success: false, error: `Error procesando archivo de ventas: ${err.message}` });
+  }
+});
+
+// GET list of all sales records across history
+app.get("/api/v1/sales/records", (req, res) => {
+  try {
+    const sales = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+    res.status(200).json({ success: true, data: sales, sales });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
