@@ -72,7 +72,9 @@ const KEYS = {
   INVENTORY_IMPORT_ERRORS: 'restock_pro_inventory_import_errors',
   INVENTORY_IMPORT_MAPPINGS: 'restock_pro_inventory_import_mappings',
   RECIPES: 'restock_pro__recipes',
-  DAILY_CLOSES: 'restock_pro__daily_closes'
+  DAILY_CLOSES: 'restock_pro__daily_closes',
+  BASE_PREPARATIONS: 'restock_pro_base_preparations_v1',
+  PRODUCTION_RECORDS: 'restock_pro_production_records_v1'
 };
 
 // Helper to safe-parse JSON
@@ -96,7 +98,7 @@ function setLocalStorageItem<T>(key: string, value: T): void {
 
 // Check if initialized
 export function initializeStore(forceReset = false) {
-  const versionKey = 'restock_pro_clean_v5_recipes';
+  const versionKey = 'restock_pro_clean_v6_basepreps';
   const hasBeenCleaned = localStorage.getItem(versionKey);
 
   if (forceReset || !hasBeenCleaned) {
@@ -149,9 +151,84 @@ export function initializeStore(forceReset = false) {
           { productId: 'prod-3', quantity: 1, isPortion: true }
         ],
         price: 750
+      },
+      {
+        id: 'rec-arepa-pollo',
+        name: 'Arepa Reina Pepiada (Pollo y Queso)',
+        ingredients: [
+          { productId: 'prod-base-masa', quantity: 80, isPortion: false }, // usa 80 g de masa lista de arepa
+          { productId: 'prod-base-pollo', quantity: 1, isPortion: true }, // usa 1 porción de pollo esmechado (100g)
+          { productId: 'prod-sal', quantity: 1, isPortion: false }        // usa 1 g de sal
+        ],
+        price: 280
+      },
+      {
+        id: 'rec-arepa-sencilla',
+        name: 'Arepa Viuda (Solo Masa)',
+        ingredients: [
+          { productId: 'prod-base-masa', quantity: 80, isPortion: false } // usa 80 g de masa lista de arepa
+        ],
+        price: 150
       }
     ]);
     setLocalStorageItem(KEYS.DAILY_CLOSES, []);
+
+    // Preparaciones Base Iniciales
+    const initialBasePreparations = [
+      {
+        id: 'base-prep-masa-arepa',
+        name: 'Masa lista de arepa',
+        code: 'PREP-MASA-AREPA',
+        categoryId: 'cat-4', // Almacén y Abarrotes
+        transformationType: 'BASE_PREPARATION' as const,
+        ingredients: [
+          { productId: 'prod-harina', quantity: 1000, unitId: 'uni-7' }, // 1000g Flour
+          { productId: 'prod-agua', quantity: 1500, unitId: 'uni-8' },  // 1500ml Water
+          { productId: 'prod-sal', quantity: 20, unitId: 'uni-7' },      // 20g Salt
+          { productId: 'prod-aceite', quantity: 50, unitId: 'uni-8' }    // 50ml Oil
+        ],
+        expectedYieldPercentage: 100,
+        expectedWastePercentage: 5,
+        resultUnitId: 'uni-7', // Gramos
+        expectedResultQty: 2400, // 2400 g
+        actualResultQty: 2400,
+        standardPortionSize: 80, // 80 g portion
+        standardPortionUnitId: 'uni-9', // portion
+        portionsExpected: 30, // 2400 / 80
+        portionsReal: 30,
+        totalCost: 138.5,
+        costPerResultUnit: 0.0577, // 138.5 / 2400
+        costPerPortion: 4.62, // 138.5 / 30
+        status: 'Activo' as const,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'base-prep-pollo-esmechado',
+        name: 'Pollo esmechado',
+        code: 'PREP-POLLO-ESMECHADO',
+        categoryId: 'cat-1', // Carnes y Aves
+        transformationType: 'YIELD_PRODUCTION' as const,
+        ingredients: [
+          { productId: 'prod-pollo-crudo', quantity: 10000, unitId: 'uni-7' } // 10 kg Chicken Crudo
+        ],
+        expectedYieldPercentage: 70, // 70% yield
+        expectedWastePercentage: 30, // 30% loss
+        resultUnitId: 'uni-7', // Gramos
+        expectedResultQty: 7000, // 7000 g
+        actualResultQty: 7000,
+        standardPortionSize: 100, // 100 g portion
+        standardPortionUnitId: 'uni-9',
+        portionsExpected: 70,
+        portionsReal: 70,
+        totalCost: 2600.0, // 10000 * 0.26
+        costPerResultUnit: 0.3714, // 2600 / 7000
+        costPerPortion: 37.14, // 2600 / 70
+        status: 'Activo' as const,
+        createdAt: new Date().toISOString()
+      }
+    ];
+    setLocalStorageItem(KEYS.BASE_PREPARATIONS, initialBasePreparations);
+    setLocalStorageItem(KEYS.PRODUCTION_RECORDS, []);
   }
 }
 
@@ -1014,9 +1091,31 @@ export const store = {
     if (index !== -1) {
       const p = products[index];
       const prevPortions = p.portionsAvailable || 0;
+      const newPortions = Math.max(0, prevPortions + diffQty);
+
+      const areaStocks = { ...(p.areaStocks || {}) };
+      let newStock = p.currentStock;
+
+      // Determine size of portion to sync physical stock
+      let portionSize = p.portionSize || 1;
+      if (p.isBasePreparation) {
+        portionSize = 100;
+        if (p.id === 'prod-base-masa') portionSize = 80;
+        if (p.id === 'prod-base-pollo') portionSize = 100;
+      }
+
+      if (portionSize > 1) {
+        const prevAreaStock = areaStocks['Cocina'] || 0;
+        // diffQty is negative for sales/usage, so it correctly decreases stock
+        areaStocks['Cocina'] = Math.max(0, prevAreaStock + (diffQty * portionSize));
+        newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+      }
+
       products[index] = {
         ...p,
-        portionsAvailable: Math.max(0, prevPortions + diffQty)
+        portionsAvailable: newPortions,
+        currentStock: portionSize > 1 ? newStock : p.currentStock,
+        areaStocks: portionSize > 1 ? areaStocks : p.areaStocks
       };
       setLocalStorageItem(KEYS.PRODUCTS, products);
     }
@@ -1244,5 +1343,228 @@ export const store = {
       `Cierre diario de cocina efectuado para la fecha ${close.date}. Estado: SELLADO. Dif total: ${close.items.reduce((acc, i) => acc + i.difference, 0)} porciones.`,
       close.id
     );
+  },
+
+  // === BASE PREPARATIONS ACCESSORS ===
+  getBasePreparations(): any[] {
+    return getLocalStorageItem<any[]>(KEYS.BASE_PREPARATIONS, []);
+  },
+  saveBasePreparations(preps: any[]): void {
+    setLocalStorageItem(KEYS.BASE_PREPARATIONS, preps);
+  },
+  addBasePreparation(prep: any): void {
+    const list = this.getBasePreparations();
+    list.push(prep);
+    this.saveBasePreparations(list);
+    this.addAuditLog('CREACIÓN_PREPARACIÓN_BASE', 'Producción', `Creada la preparación base ${prep.name}`, prep.id);
+  },
+  updateBasePreparation(prep: any): void {
+    const list = this.getBasePreparations().map(p => p.id === prep.id ? prep : p);
+    this.saveBasePreparations(list);
+    this.addAuditLog('EDICIÓN_PREPARACIÓN_BASE', 'Producción', `Actualizada la preparación base ${prep.name}`, prep.id);
+  },
+  deleteBasePreparation(id: string): void {
+    const list = this.getBasePreparations().filter(p => p.id !== id);
+    this.saveBasePreparations(list);
+    this.addAuditLog('ELIMINACIÓN_PREPARACIÓN_BASE', 'Producción', `Eliminada preparación base ID ${id}`, id);
+  },
+
+  // === PRODUCTION RECORDS ACCESSORS ===
+  getProductionRecords(): any[] {
+    return getLocalStorageItem<any[]>(KEYS.PRODUCTION_RECORDS, []);
+  },
+  saveProductionRecords(records: any[]): void {
+    setLocalStorageItem(KEYS.PRODUCTION_RECORDS, records);
+  },
+  addProductionRecord(record: any): void {
+    const list = this.getProductionRecords();
+    list.unshift(record); // newest first
+    this.saveProductionRecords(list);
+  },
+
+  // === PROCESS COMPLETE LIVE PRODUCTION ===
+  executeProduction(
+    prepId: string,
+    actualResultQty: number,
+    portionsReal: number,
+    responsibleUserId: string,
+    notes?: string
+  ): { success: boolean; error?: string; record?: any } {
+    const preps = this.getBasePreparations();
+    const prepIndex = preps.findIndex(p => p.id === prepId);
+    if (prepIndex === -1) {
+      return { success: false, error: 'La preparación base no existe.' };
+    }
+    const prep = preps[prepIndex];
+    const userList = this.getUsers();
+    const user = userList.find(u => u.id === responsibleUserId) || this.getCurrentUser();
+
+    const productsList = this.getProducts();
+
+    // 1. Calculate live cost of ingredients based on averageCost from products list
+    let generatedTotalCost = 0;
+    const ingredientDeductions: { product: Product; qty: number }[] = [];
+
+    for (const ing of prep.ingredients) {
+      const prod = productsList.find(p => p.id === ing.productId);
+      if (!prod) {
+        return { success: false, error: `El ingrediente ${ing.productId} no se encuentra en el catálogo.` };
+      }
+      generatedTotalCost += ing.quantity * (prod.averageCost || 0);
+      ingredientDeductions.push({ product: prod, qty: ing.quantity });
+    }
+
+    // 2. Perform safe deductions of ingredients (from 'Cocina' area stocks)
+    ingredientDeductions.forEach(({ product, qty }) => {
+      const prodIndex = productsList.findIndex(p => p.id === product.id);
+      if (prodIndex !== -1) {
+        const p = productsList[prodIndex];
+        const prevStock = p.currentStock;
+        const areaStocks = { ...(p.areaStocks || {}) };
+        const prevAreaStock = areaStocks['Cocina'] || 0;
+
+        areaStocks['Cocina'] = Math.max(0, prevAreaStock - qty);
+        const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+        productsList[prodIndex] = {
+          ...p,
+          currentStock: newStock,
+          areaStocks: areaStocks
+        };
+
+        // Record Salida movement in Kárdex
+        this.addMovement({
+          id: 'mov-' + Math.random().toString(36).substr(2, 9),
+          productId: p.id,
+          productName: p.name,
+          qty: -qty,
+          unitCode: this.getUnitCode(p.unitId),
+          type: 'Salida',
+          quantityBefore: prevStock,
+          quantityAfter: newStock,
+          area: 'Cocina',
+          userId: user.id,
+          userName: user.name,
+          date: new Date().toISOString(),
+          reason: `Consumo por Producción: ${prep.name}`,
+          comment: `Deducción de insumos automática para lote de producción.`
+        });
+      }
+    });
+
+    // 3. Add resulting yield to operational kitchen stock of the Base Preparation Product
+    let baseProdIndex = productsList.findIndex(p => p.basePreparationId === prepId || p.id === 'prod-base-' + prep.code.toLowerCase().replace('prep-', ''));
+    if (baseProdIndex === -1) {
+      baseProdIndex = productsList.findIndex(p => p.name.toLowerCase().includes(prep.name.toLowerCase()));
+    }
+
+    if (baseProdIndex !== -1) {
+      const bp = productsList[baseProdIndex];
+      const prevStock = bp.currentStock;
+      const prevPortions = bp.portionsAvailable || 0;
+      const areaStocks = { ...(bp.areaStocks || {}) };
+      const prevAreaStock = areaStocks['Cocina'] || 0;
+
+      areaStocks['Cocina'] = prevAreaStock + actualResultQty;
+      const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+      // Recalculate averageCost based on generated ingredient cost
+      const bpAverageCost = actualResultQty > 0 ? (generatedTotalCost / actualResultQty) : bp.averageCost;
+
+      productsList[baseProdIndex] = {
+        ...bp,
+        currentStock: newStock,
+        portionsAvailable: prevPortions + portionsReal,
+        averageCost: bpAverageCost,
+        lastPrice: bpAverageCost,
+        areaStocks: areaStocks
+      };
+
+      // Record Entrada movement in Kárdex for results
+      this.addMovement({
+        id: 'mov-' + Math.random().toString(36).substr(2, 9),
+        productId: bp.id,
+        productName: bp.name,
+        qty: actualResultQty,
+        unitCode: this.getUnitCode(bp.unitId),
+        type: 'Entrada',
+        quantityBefore: prevStock,
+        quantityAfter: newStock,
+        area: 'Cocina',
+        userId: user.id,
+        userName: user.name,
+        date: new Date().toISOString(),
+        reason: `Rendimiento de Producción: ${prep.name}`,
+        comment: `Entrada por producción real de ${actualResultQty}g / ${portionsReal} porciones creadas.`
+      });
+
+      // Record portion movement to keep audit neat
+      if (portionsReal > 0) {
+        const portionMId = 'pmov-' + Math.random().toString(36).substr(2, 9);
+        const list = this.getPortionMovements();
+        list.unshift({
+          id: portionMId,
+          productId: bp.id,
+          movementType: 'PORTION_IN',
+          quantity: portionsReal,
+          reason: `Rendimiento de Producción: ${prep.name}`,
+          userId: user.id,
+          userName: user.name,
+          comment: `Producción de porciones reales resultantes del lote.`,
+          createdAt: new Date().toISOString()
+        });
+        setLocalStorageItem(KEYS.PORTION_MOVEMENTS, list);
+      }
+    }
+
+    // Save final products list to storage
+    setLocalStorageItem(KEYS.PRODUCTS, productsList);
+
+    // 4. Calculate metrics
+    const differenceQty = actualResultQty - prep.expectedResultQty;
+    const costPerResultUnit = actualResultQty > 0 ? (generatedTotalCost / actualResultQty) : 0;
+    const costPerPortion = portionsReal > 0 ? (generatedTotalCost / portionsReal) : 0;
+
+    // 5. Create production record
+    const newRecord = {
+      id: 'pr-' + Math.random().toString(36).substr(2, 9),
+      preparationId: prepId,
+      date: new Date().toISOString(),
+      expectedResultQty: prep.expectedResultQty,
+      actualResultQty,
+      portionsExpected: prep.portionsExpected,
+      portionsReal,
+      differenceQty,
+      mermaQty: differenceQty < 0 ? Math.abs(differenceQty) : 0, // loss or waste
+      costPerResultUnit,
+      costPerPortion,
+      responsibleUserId: user.id,
+      responsibleUserName: user.name,
+      notes,
+      status: 'Completado' as const
+    };
+
+    this.addProductionRecord(newRecord);
+
+    // Update the base preparation object with historical values
+    preps[prepIndex] = {
+      ...prep,
+      actualResultQty,
+      portionsReal,
+      totalCost: generatedTotalCost,
+      costPerResultUnit,
+      costPerPortion
+    };
+    this.saveBasePreparations(preps);
+
+    // Add Audit logs
+    this.addAuditLog(
+      'CONSIGNACION_PRODUCCION',
+      'Producción',
+      `Lote procesado para ${prep.name}. Esperado: ${prep.expectedResultQty} (g/ml), Obtenido: ${actualResultQty} (g/ml). Diferencia: ${differenceQty}. Costo por porción: RD$ ${costPerPortion.toFixed(2)}`,
+      newRecord.id
+    );
+
+    return { success: true, record: newRecord };
   }
 };

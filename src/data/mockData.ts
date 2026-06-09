@@ -114,7 +114,13 @@ export const mockProducts: Product[] = [
     lastPrice: 120,
     description: 'Pechuga de pollo fresca lista para porcionar en filetes estándares para plancha.',
     providerIds: ['prov-1', 'prov-2'],
-    portionsAvailable: 16 // 38 producidas - 15 vendidas - 2 consumo personal - 5 ventas delivery
+    portionsAvailable: 16, // 38 producidas - 15 vendidas - 2 consumo personal - 5 ventas delivery
+    areaStocks: {
+      'Almacén seco': 0,
+      'Refrigerados': 10,
+      'Congelados': 5,
+      'Cocina': 5
+    }
   },
   {
     id: 'prod-2',
@@ -128,7 +134,11 @@ export const mockProducts: Product[] = [
     lastPrice: 450,
     description: 'Lomo fino de res Angus importado para cortes de medallón gourmet.',
     providerIds: ['prov-1', 'prov-2'],
-    portionsAvailable: 0
+    portionsAvailable: 0,
+    areaStocks: {
+      'Refrigerados': 10,
+      'Cocina': 5
+    }
   },
   {
     id: 'prod-3',
@@ -142,7 +152,134 @@ export const mockProducts: Product[] = [
     lastPrice: 550,
     description: 'Filetes de salmón de acuicultura noruega para porcionamiento sashimi o grill.',
     providerIds: ['prov-1', 'prov-2'],
-    portionsAvailable: 0
+    portionsAvailable: 0,
+    areaStocks: {
+      'Refrigerados': 6,
+      'Cocina': 4
+    }
+  },
+  {
+    id: 'prod-harina',
+    name: 'Harina de Maíz Precocida',
+    categoryId: 'cat-4',
+    unitId: 'uni-7', // gramos
+    currentStock: 20000, // 20,000 gramos = 20 kg
+    minStock: 5000,
+    maxStock: 100000,
+    averageCost: 0.12, // RD$0.12 por gramo (RD$120/kg)
+    lastPrice: 0.12,
+    description: 'Harina de maíz refinada precocida ideal para masa de arepas y empanadas.',
+    providerIds: ['prov-1'],
+    areaStocks: {
+      'Almacén seco': 15000,
+      'Cocina': 5000
+    }
+  },
+  {
+    id: 'prod-agua',
+    name: 'Agua Purificada Refinada',
+    categoryId: 'cat-4',
+    unitId: 'uni-8', // mililitros
+    currentStock: 100000, // 100,000 ml = 100 L
+    minStock: 10000,
+    maxStock: 500000,
+    averageCost: 0.005, // RD$0.005 por ml (RD$5/L)
+    lastPrice: 0.005,
+    description: 'Agua filtrada potable para uso en preparaciones culinarias de base.',
+    providerIds: ['prov-1'],
+    areaStocks: {
+      'Almacén seco': 80000,
+      'Cocina': 20000
+    }
+  },
+  {
+    id: 'prod-sal',
+    name: 'Sal Yodada Molida',
+    categoryId: 'cat-4',
+    unitId: 'uni-7', // gramos
+    currentStock: 8000, // 8,000 gramos
+    minStock: 1000,
+    maxStock: 20000,
+    averageCost: 0.05, // RD$0.05 por gramo (RD$50/kg)
+    lastPrice: 0.05,
+    description: 'Sal de mesa fina yodada para sazonar producciones y salsas.',
+    providerIds: ['prov-1'],
+    areaStocks: {
+      'Almacén seco': 6000,
+      'Cocina': 2000
+    }
+  },
+  {
+    id: 'prod-aceite',
+    name: 'Aceite de Girasol',
+    categoryId: 'cat-4',
+    unitId: 'uni-8', // mililitros
+    currentStock: 15000, // 15L
+    minStock: 2000,
+    maxStock: 50000,
+    averageCost: 0.2, // RD$0.2 por ml (RD$200/L)
+    lastPrice: 0.2,
+    description: 'Aceite vegetal refinado para cocción y lubricación de masas.',
+    providerIds: ['prov-1'],
+    areaStocks: {
+      'Almacén seco': 10000,
+      'Cocina': 5000
+    }
+  },
+  {
+    id: 'prod-pollo-crudo',
+    name: 'Pollo Entero Limpio (Crudo)',
+    categoryId: 'cat-1',
+    unitId: 'uni-7', // gramos
+    currentStock: 30000, // 30 kg
+    minStock: 10000,
+    maxStock: 150000,
+    averageCost: 0.26, // RD$0.26 por gramo (RD$260/kg)
+    lastPrice: 0.26,
+    description: 'Pollo crudo lavado entero, listo para despiece, cocción y deshilachado.',
+    providerIds: ['prov-2'],
+    areaStocks: {
+      'Congelados': 20000,
+      'Cocina': 10000
+    }
+  },
+  {
+    id: 'prod-base-masa',
+    name: 'Masa Lista de Arepa (Base)',
+    categoryId: 'cat-4',
+    unitId: 'uni-7', // gramos
+    currentStock: 2400, // 2.4 kg
+    minStock: 1000,
+    maxStock: 20000,
+    averageCost: 0.0577, // calculado de ingredientes
+    lastPrice: 0.0577,
+    description: 'Preparación base consistente en masa de harina de maíz y condimentos para arepa.',
+    providerIds: [],
+    isBasePreparation: true,
+    basePreparationId: 'base-prep-masa-arepa',
+    portionsAvailable: 30, // 2.4kg / 80g de porción
+    areaStocks: {
+      'Cocina': 2400
+    }
+  },
+  {
+    id: 'prod-base-pollo',
+    name: 'Pollo Esmechado de la Casa (Base)',
+    categoryId: 'cat-1',
+    unitId: 'uni-7', // gramos
+    currentStock: 7000, // 7 kg
+    minStock: 2000,
+    maxStock: 30000,
+    averageCost: 0.3714, // calculado de rendimiento y coste de pollo crudo
+    lastPrice: 0.3714,
+    description: 'Pechuga desmenuzada sazonada con merma operativa, lista para relleno.',
+    providerIds: [],
+    isBasePreparation: true,
+    basePreparationId: 'base-prep-pollo-esmechado',
+    portionsAvailable: 70, // 7000g / 100g de porción
+    areaStocks: {
+      'Cocina': 7000
+    }
   }
 ];
 

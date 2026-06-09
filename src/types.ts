@@ -53,6 +53,8 @@ export interface Product {
   description: string;
   providerIds: string[]; // Provider IDs
   portionsAvailable?: number; // Portions stock tracker
+  isBasePreparation?: boolean;
+  basePreparationId?: string;
 
   // Advanced operational parameters
   requiresPortioning?: boolean;
@@ -707,6 +709,65 @@ export interface SalesMenuMapping {
   createdAt: string;
 }
 
+// === NUEVO: PREPARACIONES BASE Y PRODUCCIÓN MULTI-NIVEL ===
+
+export type TransformationType =
+  | 'DIRECT_PORTION'      // Porcionamiento directo (20 lb de filete de pollo -> 8 oz por porción)
+  | 'BASE_PREPARATION'    // Preparación base (Harina + agua + sal = masa lista)
+  | 'YIELD_PRODUCTION'    // Producción con rendimiento cocción/limpieza (10 kg crudo con 70% rendimiento = 7 kg esmechado)
+  | 'BATCH_PREPARATION'   // Preparación por lote (1 lote de salsa = 3 litros)
+  | 'POSTERIOR_PORTION';   // Porcionamiento posterior (2.4 kg de masa lista / 80 g = 30 porciones)
+
+export interface BasePreparationIngredient {
+  productId: string; // Puede ser producto base (materia prima) u otra preparación base
+  isBasePreparation?: boolean; // Indica si el ingrediente en sí es otra preparación base
+  quantity: number;
+  unitId: string;
+}
+
+export interface BasePreparation {
+  id: string;
+  name: string;
+  code: string;
+  categoryId: string; // ID de categoría
+  transformationType: TransformationType;
+  ingredients: BasePreparationIngredient[];
+  expectedYieldPercentage: number; // Porcentaje de rendimiento esperado (e.g. 70 para 70%)
+  expectedWastePercentage: number; // Porcentaje de merma esperada (e.g. 5 para 5%)
+  resultUnitId: string; // Unidad resultante (ej: kg, L, lb)
+  expectedResultQty: number; // Cantidad esperada resultante calculated or configured (ej: 2.4 kg)
+  actualResultQty?: number; // Cantidad real resultante reportada (ej: 2.2 kg)
+  standardPortionSize?: number; // Tamaño de porción en gramos/onzas si aplica (ej: 80 g)
+  standardPortionUnitId?: string; // Unidad de la porción operativa (ej: porciones)
+  portionsExpected?: number; // Porciones teóricas esperadas (ej. 30)
+  portionsReal?: number; // Porciones reales obtenidas (ej: 27)
+  totalCost: number; // Suma del costo de los ingredientes
+  costPerResultUnit: number; // Costo por unidad resultante (costo_total / cantidad_real)
+  costPerPortion?: number; // Costo por porción (costo_total / porciones_reales)
+  status: 'Activo' | 'Borrador' | 'Inactivo';
+  responsibleUserId?: string;
+  createdAt: string;
+  notes?: string;
+}
+
+export interface ProductionRecord {
+  id: string;
+  preparationId: string; // Vincular a BasePreparation config
+  date: string;
+  expectedResultQty: number;
+  actualResultQty: number;
+  portionsExpected?: number;
+  portionsReal?: number;
+  differenceQty: number; // actual - expected
+  mermaQty: number; // merma o pérdida registrada
+  costPerResultUnit: number;
+  costPerPortion?: number;
+  responsibleUserId: string;
+  responsibleUserName: string;
+  notes?: string;
+  status: 'Completado' | 'Observado' | 'Cancelado';
+}
+
 export interface SaleRecord {
   id: string;
   date: string;       // YYYY-MM-DD or ISO
@@ -725,6 +786,7 @@ export interface SaleRecord {
   deductionsApplied: boolean;
   createdAt: string;
 }
+
 
 
 

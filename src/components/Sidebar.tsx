@@ -58,7 +58,7 @@ export default function Sidebar({
     { id: 'Inventario', label: 'Inventario', icon: Boxes },
     { id: 'Solicitudes de cocina', label: 'Solicitudes Cocina', icon: ChefHat },
     { id: 'Compras', label: 'Compras', icon: ShoppingBag },
-    { id: 'Porcionamiento', label: 'Porcionamiento', icon: Scale },
+    { id: 'Porcionamiento', label: 'Producción y Porc.', icon: Scale },
     { id: 'Menú y recetas', label: 'Menú y Fichas', icon: Utensils },
     { id: 'Libro de compras', label: 'Libro de Compras', icon: BookOpen },
     { id: 'Proveedores', label: 'Proveedores', icon: Truck },

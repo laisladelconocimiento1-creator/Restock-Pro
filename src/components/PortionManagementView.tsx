@@ -12,7 +12,10 @@ import {
   SalesChannel,
   Recipe,
   KitchenDailyClose,
-  KitchenDailyCloseItem
+  KitchenDailyCloseItem,
+  TransformationType,
+  BasePreparation,
+  BasePreparationIngredient
 } from '../types';
 import {
   Scale,
@@ -65,8 +68,43 @@ export default function PortionManagementView({
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [dailyCloses, setDailyCloses] = useState<KitchenDailyClose[]>([]);
 
+  // Base Preparations and Production Records
+  const [basePreparations, setBasePreparations] = useState<BasePreparation[]>([]);
+  const [productionRecords, setProductionRecords] = useState<any[]>([]);
+
+  // Modal open states for production
+  const [showBasePrepModal, setShowBasePrepModal] = useState(false);
+  const [showProduceModal, setShowProduceModal] = useState<BasePreparation | null>(null);
+  const [editingBasePrepId, setEditingBasePrepId] = useState<string | null>(null);
+
+  // Forms for Base Preparations and Production
+  const [recipeIngredientSearch, setRecipeIngredientSearch] = useState('');
+  const [basePrepForm, setBasePrepForm] = useState({
+    name: '',
+    code: '',
+    categoryId: 'cat-4',
+    transformationType: 'BASE_PREPARATION' as TransformationType,
+    ingredients: [] as BasePreparationIngredient[],
+    expectedYieldPercentage: 100,
+    expectedWastePercentage: 5,
+    resultUnitId: 'uni-7', // default Gramos
+    expectedResultQty: 2400,
+    standardPortionSize: 80,
+    standardPortionUnitId: 'uni-9',
+    portionsExpected: 30,
+    status: 'Activo' as 'Activo' | 'Borrador' | 'Inactivo',
+    notes: ''
+  });
+
+  const [produceForm, setProduceForm] = useState({
+    actualResultQty: 0,
+    portionsReal: 0,
+    responsibleUserId: currentUser.id,
+    notes: ''
+  });
+
   // Navigation sub-tab
-  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'lotes' | 'reglas' | 'inventario_cocina' | 'recetas' | 'ventas' | 'cierres' | 'historial'>('dashboard');
+  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'lotes' | 'reglas' | 'inventario_cocina' | 'recetas' | 'ventas' | 'cierres' | 'historial' | 'produccion'>('dashboard');
 
   // Modal open states
   const [showRuleModal, setShowRuleModal] = useState(false);
@@ -165,6 +203,8 @@ export default function PortionManagementView({
     setSales(store.getPortionSales());
     setRecipes(store.getRecipes());
     setDailyCloses(store.getDailyCloses());
+    setBasePreparations(store.getBasePreparations());
+    setProductionRecords(store.getProductionRecords());
   };
 
   const handleRefresh = () => {
@@ -248,6 +288,174 @@ export default function PortionManagementView({
       store.deletePortionRule(id);
       handleRefresh();
     }
+  };
+
+  // === BASE PREPARATION & PRODUCTION ACTIONS ===
+  const handleOpenNewBasePrep = () => {
+    setEditingBasePrepId(null);
+    setBasePrepForm({
+      name: '',
+      code: '',
+      categoryId: 'cat-4',
+      transformationType: 'BASE_PREPARATION',
+      ingredients: [],
+      expectedYieldPercentage: 100,
+      expectedWastePercentage: 5,
+      resultUnitId: 'uni-7', // default Gramos
+      expectedResultQty: 2400,
+      standardPortionSize: 80,
+      standardPortionUnitId: 'uni-9',
+      portionsExpected: 30,
+      status: 'Activo',
+      notes: ''
+    });
+    setNewIngredient({ productId: products[0]?.id || '', quantity: 100, isPortion: false });
+    setShowBasePrepModal(true);
+  };
+
+  const handleOpenEditBasePrep = (prep: BasePreparation) => {
+    setEditingBasePrepId(prep.id);
+    setBasePrepForm({
+      name: prep.name,
+      code: prep.code,
+      categoryId: prep.categoryId || 'cat-4',
+      transformationType: prep.transformationType || 'BASE_PREPARATION',
+      ingredients: prep.ingredients || [],
+      expectedYieldPercentage: prep.expectedYieldPercentage || 100,
+      expectedWastePercentage: prep.expectedWastePercentage || 0,
+      resultUnitId: prep.resultUnitId || 'uni-7',
+      expectedResultQty: prep.expectedResultQty || 1000,
+      standardPortionSize: prep.standardPortionSize || 100,
+      standardPortionUnitId: prep.standardPortionUnitId || 'uni-9',
+      portionsExpected: prep.portionsExpected || 10,
+      status: (prep.status as any) || 'Activo',
+      notes: prep.notes || ''
+    });
+    setNewIngredient({ productId: products[0]?.id || '', quantity: 100, isPortion: false });
+    setShowBasePrepModal(true);
+  };
+
+  const handleSaveBasePrepSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!basePrepForm.name || !basePrepForm.code) {
+      alert("Por favor complete nombre y código de la fórmula.");
+      return;
+    }
+    if (basePrepForm.ingredients.length === 0) {
+      alert("Por favor cargue al menos un insumo/ingrediente.");
+      return;
+    }
+
+    if (editingBasePrepId) {
+      const updated: BasePreparation = {
+        id: editingBasePrepId,
+        name: basePrepForm.name,
+        code: basePrepForm.code,
+        categoryId: basePrepForm.categoryId,
+        transformationType: basePrepForm.transformationType,
+        ingredients: basePrepForm.ingredients,
+        expectedYieldPercentage: basePrepForm.expectedYieldPercentage,
+        expectedWastePercentage: basePrepForm.expectedWastePercentage,
+        resultUnitId: basePrepForm.resultUnitId,
+        expectedResultQty: basePrepForm.expectedResultQty,
+        standardPortionSize: basePrepForm.standardPortionSize,
+        standardPortionUnitId: basePrepForm.standardPortionUnitId,
+        portionsExpected: basePrepForm.portionsExpected,
+        status: basePrepForm.status,
+        notes: basePrepForm.notes,
+        updatedAt: new Date().toISOString()
+      };
+      store.updateBasePreparation(updated);
+    } else {
+      const created: BasePreparation = {
+        id: 'bp-' + Math.random().toString(36).substr(2, 9),
+        name: basePrepForm.name,
+        code: basePrepForm.code,
+        categoryId: basePrepForm.categoryId,
+        transformationType: basePrepForm.transformationType,
+        ingredients: basePrepForm.ingredients,
+        expectedYieldPercentage: basePrepForm.expectedYieldPercentage,
+        expectedWastePercentage: basePrepForm.expectedWastePercentage,
+        resultUnitId: basePrepForm.resultUnitId,
+        expectedResultQty: basePrepForm.expectedResultQty,
+        standardPortionSize: basePrepForm.standardPortionSize,
+        standardPortionUnitId: basePrepForm.standardPortionUnitId,
+        portionsExpected: basePrepForm.portionsExpected,
+        status: basePrepForm.status,
+        notes: basePrepForm.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      store.addBasePreparation(created);
+    }
+    setShowBasePrepModal(false);
+    handleRefresh();
+  };
+
+  const handleDeleteBasePrep = (id: string) => {
+    if (confirm("¿Está seguro de eliminar esta Fórmulación Base de producción?")) {
+      store.deleteBasePreparation(id);
+      handleRefresh();
+    }
+  };
+
+  const handleOpenProduceModal = (prep: BasePreparation) => {
+    setShowProduceModal(prep);
+    setProduceForm({
+      actualResultQty: prep.expectedResultQty,
+      portionsReal: prep.portionsExpected,
+      responsibleUserId: currentUser.id,
+      notes: ''
+    });
+  };
+
+  const handleExecuteProductionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showProduceModal) return;
+
+    const res = store.executeProduction(
+      showProduceModal.id,
+      produceForm.actualResultQty,
+      produceForm.portionsReal,
+      produceForm.responsibleUserId,
+      produceForm.notes
+    );
+
+    if (res.success) {
+      setShowProduceModal(null);
+      handleRefresh();
+      alert("Lote de producción procesado con éxito. Se descontaron los insumos asignados de Cocina y se incrementó el stock de la Prep. Base.");
+    } else {
+      alert("Error: " + res.error);
+    }
+  };
+
+  const handleAddBasePrepIngredient = () => {
+    if (!newIngredient.productId) return;
+    if (basePrepForm.ingredients.some(i => i.productId === newIngredient.productId)) {
+      alert("Este insumo ya está agregado a la fórmula.");
+      return;
+    }
+    const updatedIngs = [
+      ...basePrepForm.ingredients,
+      {
+        productId: newIngredient.productId,
+        quantity: newIngredient.quantity,
+        isPortion: newIngredient.isPortion
+      }
+    ];
+    setBasePrepForm({
+      ...basePrepForm,
+      ingredients: updatedIngs
+    });
+  };
+
+  const handleRemoveBasePrepIngredient = (idx: number) => {
+    const updatedIngs = basePrepForm.ingredients.filter((_, i) => i !== idx);
+    setBasePrepForm({
+      ...basePrepForm,
+      ingredients: updatedIngs
+    });
   };
 
   // Batches manual creations (Fallback)
@@ -883,6 +1091,12 @@ export default function PortionManagementView({
             className={`pb-2.5 text-xs font-bold transition whitespace-nowrap ${activeSubTab === 'cierres' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Cierre Diario de Cocina ({dailyCloses.length})
+          </button>
+          <button
+            onClick={() => { setActiveSubTab('produccion'); setSearchQuery(''); }}
+            className={`pb-2.5 text-xs font-bold transition whitespace-nowrap ${activeSubTab === 'produccion' ? 'text-orange-600 border-b-2 border-orange-600 font-extrabold text-emerald-700' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            🍳 Producción y Fórmulas ({basePreparations.length})
           </button>
           <button
             onClick={() => { setActiveSubTab('historial'); setSearchQuery(''); }}
@@ -1837,6 +2051,238 @@ export default function PortionManagementView({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 9: PRODUCTION AND BASE PREPARATIONS MANAGEMENT */}
+      {activeSubTab === 'produccion' && (
+        <div className="space-y-6 font-sans" id="productionAndFormulasBox">
+          {/* Main Action Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-4 border rounded-2xl shadow-xs">
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-505 block animate-pulse"></span>
+                Normas de Producción Interna y Preparados Base
+              </h3>
+              <p className="text-[10px] text-slate-450 font-medium">
+                Regule mermas y ruidos de transformación para bases (semi-elaborados) que alimentan los platos finales.
+              </p>
+            </div>
+            <button
+              onClick={handleOpenNewBasePrep}
+              className="bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold py-2 px-4 rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 leading-none"
+            >
+              <Plus className="w-3.5 h-3.5" /> Nueva Fórmula Base / Semi-Elaborado
+            </button>
+          </div>
+
+          {/* Formulas Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="basePreparationsGrid">
+            {basePreparations.length === 0 ? (
+              <div className="col-span-full bg-slate-50 rounded-2xl p-12 text-center border border-dashed">
+                <p className="text-xs text-slate-400 italic">No hay fórmulas de preparados base cargadas en el sistema.</p>
+                <button
+                  onClick={handleOpenNewBasePrep}
+                  className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[10.5px] font-bold p-2 px-4 rounded-xl"
+                >
+                  Definir Primer Fórmula Técnica
+                </button>
+              </div>
+            ) : (
+              basePreparations.map(bp => {
+                // Calculate theoretical ingredients cost using product averageCosts
+                let totalIngredientsCost = 0;
+                bp.ingredients.forEach(ing => {
+                  const prod = products.find(p => p.id === ing.productId);
+                  totalIngredientsCost += ing.quantity * (prod?.averageCost || 0);
+                });
+
+                const expectedCostPerGm = bp.expectedResultQty > 0 ? (totalIngredientsCost / bp.expectedResultQty) : 0;
+                const expectedCostPerPortion = bp.portionsExpected > 0 ? (totalIngredientsCost / bp.portionsExpected) : 0;
+                const resultUnit = units.find(u => u.id === bp.resultUnitId)?.code || 'g';
+
+                return (
+                  <div key={bp.id} className="bg-white border rounded-2xl shadow-xs hover:shadow-sm transition-all overflow-hidden flex flex-col justify-between">
+                    {/* Header */}
+                    <div className="p-4 border-b bg-slate-50/50 flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-xs leading-tight mb-1">{bp.name}</h4>
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
+                          {bp.code}
+                        </span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditBasePrep(bp)}
+                          className="text-slate-500 hover:text-indigo-600 p-1 rounded-lg bg-white border shadow-xs"
+                          title="Editar Fórmula"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBasePrep(bp.id)}
+                          className="text-slate-500 hover:text-red-650 p-1 rounded-lg bg-white border shadow-xs"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content Panel */}
+                    <div className="p-4 space-y-3.5 text-[11px] flex-1">
+                      {/* Ingredients list */}
+                      <div>
+                        <span className="text-[9.5px] text-slate-450 font-bold uppercase font-sans tracking-wide block mb-1">Ingredientes de Formulación:</span>
+                        <div className="bg-slate-50/70 rounded-xl p-2.5 border divide-y space-y-1 divide-slate-100 font-medium">
+                          {bp.ingredients.map((ing, i) => {
+                            const prod = products.find(p => p.id === ing.productId);
+                            const ingUnit = units.find(u => u.id === prod?.unitId)?.code || 'g';
+                            const itemCost = ing.quantity * (prod?.averageCost || 0);
+                            return (
+                              <div key={i} className="flex justify-between text-[10.5px] pt-1 text-slate-650">
+                                <span className="truncate max-w-[130px] font-bold text-slate-700">{prod?.name || 'Insumo'}</span>
+                                <span className="font-mono text-slate-400">
+                                  {ing.quantity} {ingUnit} <span className="text-[9.5px] italic text-slate-400">(RD$ {itemCost.toFixed(0)})</span>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Yield expectations */}
+                      <div className="grid grid-cols-2 gap-2 bg-slate-50 rounded-xl p-3 border">
+                        <div>
+                          <p className="text-[9.5px] text-slate-400 block font-medium uppercase">Resultante Esperado</p>
+                          <strong className="text-slate-805 text-sm font-mono tracking-tight">
+                            {bp.expectedResultQty} <span className="text-[10px] text-slate-400">{resultUnit}</span>
+                          </strong>
+                        </div>
+                        <div>
+                          <p className="text-[9.5px] text-slate-400 block font-medium uppercase">Porciones Estimadas</p>
+                          <strong className="text-slate-805 text-sm font-mono tracking-tight">
+                            {bp.portionsExpected} <span className="text-[10px] text-slate-400">pz / {bp.standardPortionSize}g</span>
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Expected Cost Breakdown */}
+                      <div className="border bg-indigo-50/20 p-3 rounded-xl space-y-1.5 border-indigo-100/50">
+                        <span className="text-[9.5px] text-indigo-800 font-bold uppercase font-sans tracking-wide block">Costos Estimados en Lote:</span>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-500">Costo Material Total:</span>
+                          <strong className="font-mono text-slate-800">RD$ {totalIngredientsCost.toLocaleString([], {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                        </div>
+                        <div className="flex justify-between items-center text-xs bg-white/60 p-1 px-2 rounded-lg font-bold">
+                          <span className="text-indigo-905">Costo por Porción ({bp.standardPortionSize}g):</span>
+                          <strong className="font-mono text-emerald-700 font-bold">RD$ {expectedCostPerPortion.toLocaleString([], {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                        </div>
+                      </div>
+
+                      {/* Last actual batch performance */}
+                      {bp.actualResultQty !== undefined && bp.portionsReal !== undefined && (
+                        <div className="p-2.5 bg-yellow-50 text-yellow-900 border border-yellow-101 rounded-xl text-[10px] font-medium space-y-0.5">
+                          <span className="font-bold text-[9px] uppercase tracking-wide text-yellow-805">Rendimiento Último Lote:</span>
+                          <div className="flex justify-between">
+                            <span>Materia Realizada:</span>
+                            <span className="font-bold font-mono">{bp.actualResultQty} {resultUnit}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] font-bold">
+                            <span>Porciones Obtenidas:</span>
+                            <span className="font-mono text-emerald-800">{bp.portionsReal} porciones</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-3 bg-slate-50 border-t">
+                      <button
+                        onClick={() => handleOpenProduceModal(bp)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-xs"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white text-white" /> Registrar Lote Producido
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Historical Batch Run Logs */}
+          <div className="bg-white rounded-2xl border shadow-xs overflow-hidden" id="productionBatchHistory">
+            <div className="p-4 bg-slate-50 border-b flex justify-between items-center font-semibold text-xs text-slate-800">
+              <h4 className="font-bold">Historial de Lotes de Producción Procesados (Kárdex Técnico)</h4>
+              <span className="bg-slate-200 text-slate-705 font-mono text-[9px] font-bold px-2 py-0.5 rounded">
+                {productionRecords.length} RUNS
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b font-bold text-slate-400 text-[9.5px] uppercase tracking-wider">
+                    <th className="p-3">Fecha de Producción</th>
+                    <th className="p-3">Preparación Base / Semi-Elaborado</th>
+                    <th className="p-3 text-center">Rendimiento Esperado</th>
+                    <th className="p-3 text-center">Rendimiento Realizado</th>
+                    <th className="p-3 text-center">Merma / Desviación</th>
+                    <th className="p-3 text-right">Costo / Porción</th>
+                    <th className="p-3">Chef Responsable</th>
+                    <th className="p-3">Observaciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y font-sans text-slate-705">
+                  {productionRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-12 text-center text-slate-400 italic">No hay registros de producción procesados en este ciclo.</td>
+                    </tr>
+                  ) : (
+                    productionRecords.map(rec => {
+                      const formula = basePreparations.find(bp => bp.id === rec.preparationId);
+                      const resultUnit = formula ? (units.find(u => u.id === formula.resultUnitId)?.code || 'g') : 'g';
+                      
+                      return (
+                        <tr key={rec.id} className="hover:bg-slate-50/50 font-medium">
+                          <td className="p-3 font-mono text-slate-400 text-[10px]">
+                            {new Date(rec.date).toLocaleDateString()} {new Date(rec.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                          </td>
+                          <td className="p-3">
+                            <p className="font-bold text-slate-900">{formula ? formula.name : 'Preparación Desconocida'}</p>
+                            <span className="font-mono text-[9px] bg-slate-100 text-slate-500 uppercase px-1 rounded">{formula?.code || 'PREP'}</span>
+                          </td>
+                          <td className="p-3 text-center font-mono text-slate-500">
+                            {rec.expectedResultQty} {resultUnit} ({rec.portionsExpected} pz)
+                          </td>
+                          <td className="p-3 text-center font-mono font-bold text-slate-900 bg-emerald-50/20">
+                            {rec.actualResultQty} {resultUnit} (<span className="text-emerald-700">{rec.portionsReal} pz</span>)
+                          </td>
+                          <td className="p-3 text-center">
+                            {rec.differenceQty === 0 ? (
+                              <span className="text-slate-400 font-semibold">—</span>
+                            ) : rec.differenceQty > 0 ? (
+                              <span className="text-emerald-700 font-bold font-mono">+{rec.differenceQty} {resultUnit} (Exced.)</span>
+                            ) : (
+                              <span className="text-red-655 font-bold font-mono">-{Math.abs(rec.differenceQty)} {resultUnit} (Cof. {((rec.actualResultQty / rec.expectedResultQty) * 100).toFixed(0)}%)</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-bold text-slate-800 font-mono">
+                            RD$ {rec.costPerPortion ? rec.costPerPortion.toFixed(2) : '0.00'}
+                          </td>
+                          <td className="p-3 font-bold text-slate-600">{rec.responsibleUserName || 'Chef'}</td>
+                          <td className="p-3 max-w-[160px] text-slate-500 font-normal leading-relaxed truncate" title={rec.notes}>
+                            {rec.notes || <span className="italic text-slate-300">Ninguna anotación.</span>}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
