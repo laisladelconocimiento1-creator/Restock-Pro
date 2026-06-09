@@ -34,6 +34,7 @@ import ConfigurationView from './components/ConfigurationView';
 import LoginView from './components/LoginView';
 import PortionManagementView from './components/PortionManagementView';
 import InventoryImportView from './components/InventoryImportView';
+import MenuAndRecipesView from './components/MenuAndRecipesView';
 
 export default function App() {
   // Initialize general LocalStorage structures on construct
@@ -387,6 +388,15 @@ export default function App() {
               units={units}
               currentUser={currentUser}
               onReloadData={reloadAllDataFromStore}
+            />
+          )}
+
+          {activeModule === 'Menú y recetas' && (
+            <MenuAndRecipesView
+              products={products}
+              units={units}
+              currentUserRole={currentUser.role}
+              onRefreshInventory={reloadAllDataFromStore}
             />
           )}
 

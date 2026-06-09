@@ -41,7 +41,15 @@ const DB_PATHS = {
   OCR_RESULTS: path.join(process.cwd(), "ocr_results.json"),
   OCR_LINES: path.join(process.cwd(), "ocr_lines.json"),
   SUPPLIER_ALIASES: path.join(process.cwd(), "supplier_aliases.json"),
-  OCR_CORRECTIONS: path.join(process.cwd(), "ocr_corrections.json")
+  OCR_CORRECTIONS: path.join(process.cwd(), "ocr_corrections.json"),
+  MENU_ITEMS: path.join(process.cwd(), "menu_items.json"),
+  MENU_CATEGORIES: path.join(process.cwd(), "menu_categories.json"),
+  RECIPES: path.join(process.cwd(), "recipes.json"),
+  RECIPE_INGREDIENTS: path.join(process.cwd(), "recipe_ingredients.json"),
+  MENU_ALIASES: path.join(process.cwd(), "menu_aliases.json"),
+  COMBOS: path.join(process.cwd(), "combos.json"),
+  COMBO_ITEMS: path.join(process.cwd(), "combo_items.json"),
+  SALES_RECORDS: path.join(process.cwd(), "sales_records.json")
 };
 
 function readJsonFile<T>(filePath: string, defaultVal: T): T {
@@ -1095,28 +1103,7 @@ Provide output STRICTLY in JSON format following this schema:
   "invoiceDate": string (YYYY-MM-DD),
   "dueDate": string (YYYY-MM-DD),
   "paymentTerms": string (e.g. 'Crédito', 'Efectivo', 'Transferencia'),
-  "currency": string (e.g. 'RD
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server boots cleanly on Port ${PORT}`);
-  });
-}
-
-serveApplication();
-, 'USD'),
+  "currency": string (e.g. 'RD$'),
   "subtotal": number,
   "discountTotal": number,
   "taxTotal": number,
@@ -1707,6 +1694,1251 @@ app.patch("/api/v1/supplier-product-aliases/:id", (req, res) => {
 
     writeJsonFile(DB_PATHS.SUPPLIER_ALIASES, aliases);
     res.status(200).json({ success: true, data: aliases[idx] });
+
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// ========================================================
+// === MENÚ, FICHAS TÉCNICAS Y DESCUENTO DE VENTAS ENDPOINTS ===
+// ========================================================
+
+// 1. Categories seed initializer helper
+function getMenuCategories(): any[] {
+  const defaultCats = [
+    { id: "cat-menu-1", name: "Entradas", description: "Entradas y aperitivos calientes y fríos", createdAt: new Date().toISOString() },
+    { id: "cat-menu-2", name: "Hamburguesas", description: "Hamburguesas artesanales premium", createdAt: new Date().toISOString() },
+    { id: "cat-menu-3", name: "Pepitos", description: "Pepitos tradicionales con salsas especiales", createdAt: new Date().toISOString() },
+    { id: "cat-menu-4", name: "Platos fuertes", description: "Platos fuertes de carnes, pechugas y pescados", createdAt: new Date().toISOString() },
+    { id: "cat-menu-5", name: "Pastas", description: "Pastas frescas e italianas", createdAt: new Date().toISOString() },
+    { id: "cat-menu-6", name: "Ensaladas", description: "Ensaladas saludables y aderezos gourmet", createdAt: new Date().toISOString() },
+    { id: "cat-menu-7", name: "Guarniciones", description: "Papas, batatas, tostones, arepitas", createdAt: new Date().toISOString() },
+    { id: "cat-menu-8", name: "Bebidas", description: "Jugos naturales, refrescos y cervezas", createdAt: new Date().toISOString() },
+    { id: "cat-menu-9", name: "Postres", description: "Dulces de cocina, flanes y tortas", createdAt: new Date().toISOString() }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.MENU_CATEGORIES, defaultCats);
+}
+
+function getMenuItems(): any[] {
+  const defaultItems = [
+    {
+      id: "item-menu-1",
+      code: "HAM-01",
+      name: "Hamburguesa Clásica",
+      categoryId: "cat-menu-2",
+      salePrice: 350.00,
+      isActive: true,
+      deductsInventory: true,
+      requiresRecipe: true,
+      productionArea: "Cocina",
+      preparationTime: 12,
+      notes: "La receta favorita de los clientes.",
+      imageUrl: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "item-menu-2",
+      code: "PECH-01",
+      name: "Pechuga a la Plancha",
+      categoryId: "cat-menu-4",
+      salePrice: 450.00,
+      isActive: true,
+      deductsInventory: true,
+      requiresRecipe: true,
+      productionArea: "Cocina",
+      preparationTime: 15,
+      notes: "Sana opción de filete de pechuga jugosa.",
+      imageUrl: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "item-menu-3",
+      code: "ARE-01",
+      name: "Arepa de Pollo",
+      categoryId: "cat-menu-2",
+      salePrice: 250.00,
+      isActive: true,
+      deductsInventory: true,
+      requiresRecipe: true,
+      productionArea: "Cocina",
+      preparationTime: 8,
+      notes: "Arepa rellena de pechuga deshebrada, queso y mayonesa.",
+      imageUrl: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "item-menu-4",
+      code: "BEB-01",
+      name: "Coca Cola",
+      categoryId: "cat-menu-8",
+      salePrice: 80.00,
+      isActive: true,
+      deductsInventory: true,
+      requiresRecipe: false,
+      productionArea: "Bar",
+      preparationTime: 2,
+      notes: "Bebida desechable directa de inventario.",
+      imageUrl: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.MENU_ITEMS, defaultItems);
+}
+
+function getRecipes(): any[] {
+  const defaultRecipes = [
+    {
+      id: "rec-menu-1",
+      menuItemId: "item-menu-1",
+      version: "v1",
+      isActive: true,
+      activeFrom: new Date().toISOString().split("T")[0],
+      activeTo: null,
+      theoreticalCost: 118.00,
+      foodCostPercentage: 33.7,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "rec-menu-2",
+      menuItemId: "item-menu-2",
+      version: "v1",
+      isActive: true,
+      activeFrom: new Date().toISOString().split("T")[0],
+      activeTo: null,
+      theoreticalCost: 150.00,
+      foodCostPercentage: 33.3,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "rec-menu-3",
+      menuItemId: "item-menu-3",
+      version: "v1",
+      isActive: true,
+      activeFrom: new Date().toISOString().split("T")[0],
+      activeTo: null,
+      theoreticalCost: 130.00,
+      foodCostPercentage: 52.0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.RECIPES, defaultRecipes);
+}
+
+function getRecipeIngredients(): any[] {
+  const defaultIngredients = [
+    // Hamburguesa clásica (rec-menu-1) ingredients
+    { id: "ing-1", recipeId: "rec-menu-1", productId: "prod-2", portionProductId: "prod-2", quantity: 1, unitId: "porcion", wastePercentage: 0, costUnit: 55.00, totalCost: 55.00, deductionType: "PORTION", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-2", recipeId: "rec-menu-1", productId: "prod-uns-1", portionProductId: null, quantity: 1, unitId: "unidad", wastePercentage: 0, costUnit: 18.00, totalCost: 18.00, deductionType: "UNIT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-3", recipeId: "rec-menu-1", productId: "prod-uns-2", portionProductId: null, quantity: 1, unitId: "lonja", wastePercentage: 0, costUnit: 12.00, totalCost: 12.00, deductionType: "UNIT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-4", recipeId: "rec-menu-1", productId: "prod-uns-3", portionProductId: null, quantity: 2, unitId: "tira", wastePercentage: 0, costUnit: 10.00, totalCost: 20.00, deductionType: "UNIT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-5", recipeId: "rec-menu-1", productId: "prod-uns-4", portionProductId: null, quantity: 30, unitId: "g", wastePercentage: 10, costUnit: 0.15, totalCost: 5.00, deductionType: "WEIGHT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-6", recipeId: "rec-menu-1", productId: "prod-uns-5", portionProductId: null, quantity: 15, unitId: "g", wastePercentage: 15, costUnit: 0.20, totalCost: 3.50, deductionType: "WEIGHT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-7", recipeId: "rec-menu-1", productId: "prod-uns-6", portionProductId: null, quantity: 20, unitId: "g", wastePercentage: 5, costUnit: 0.22, totalCost: 4.50, deductionType: "VOLUME", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+    // Pechuga de Pollo al Grill (rec-menu-2) ingredients
+    { id: "ing-8", recipeId: "rec-menu-2", productId: "prod-1", portionProductId: "prod-1", quantity: 1, unitId: "porcion", wastePercentage: 0, costUnit: 120.00, totalCost: 120.00, deductionType: "PORTION", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-9", recipeId: "rec-menu-2", productId: "prod-uns-4", portionProductId: null, quantity: 50, unitId: "g", wastePercentage: 10, costUnit: 0.15, totalCost: 8.50, deductionType: "WEIGHT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-10", recipeId: "rec-menu-2", productId: "prod-uns-5", portionProductId: null, quantity: 30, unitId: "g", wastePercentage: 15, costUnit: 0.20, totalCost: 7.00, deductionType: "WEIGHT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-11", recipeId: "rec-menu-2", productId: "prod-uns-7", portionProductId: null, quantity: 25, unitId: "g", wastePercentage: 5, costUnit: 0.58, totalCost: 14.50, deductionType: "VOLUME", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+    // Arepa de pollo (rec-menu-3) ingredients
+    { id: "ing-12", recipeId: "rec-menu-3", productId: "prod-uns-8", portionProductId: null, quantity: 1, unitId: "unidad", wastePercentage: 0, costUnit: 35.00, totalCost: 35.00, deductionType: "UNIT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-13", recipeId: "rec-menu-3", productId: "prod-1", portionProductId: "prod-1", quantity: 1, unitId: "porcion", wastePercentage: 0, costUnit: 60.00, totalCost: 60.00, deductionType: "PORTION", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-14", recipeId: "rec-menu-3", productId: "prod-uns-2", portionProductId: null, quantity: 30, unitId: "g", wastePercentage: 5, costUnit: 0.50, totalCost: 16.00, deductionType: "WEIGHT", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "ing-15", recipeId: "rec-menu-3", productId: "prod-uns-6", portionProductId: null, quantity: 20, unitId: "g", wastePercentage: 5, costUnit: 0.22, totalCost: 19.00, deductionType: "VOLUME", isOptional: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.RECIPE_INGREDIENTS, defaultIngredients);
+}
+
+function getMenuAliases(): any[] {
+  const defaultAliases = [
+    { id: "alias-menu-1", rawSalesName: "Burger Clasica", menuItemId: "item-menu-1", source: "CSV_IMPORT", confidenceScore: 100, timesConfirmed: 4, lastConfirmedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "alias-menu-2", rawSalesName: "Burger Clásica", menuItemId: "item-menu-1", source: "CSV_IMPORT", confidenceScore: 100, timesConfirmed: 2, lastConfirmedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "alias-menu-3", rawSalesName: "Clasica Burguer", menuItemId: "item-menu-1", source: "CSV_IMPORT", confidenceScore: 85, timesConfirmed: 1, lastConfirmedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "alias-menu-4", rawSalesName: "Pollo Grillada", menuItemId: "item-menu-2", source: "POS", confidenceScore: 90, timesConfirmed: 3, lastConfirmedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "alias-menu-5", rawSalesName: "Pechuga Grill", menuItemId: "item-menu-2", source: "POS", confidenceScore: 100, timesConfirmed: 10, lastConfirmedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.MENU_ALIASES, defaultAliases);
+}
+
+function getCombos(): any[] {
+  const defaultCombos = [
+    { id: "combo-1", name: "Combo Clásico Hamburguesa", salePrice: 420.00, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.COMBOS, defaultCombos);
+}
+
+function getComboItems(): any[] {
+  const defaultComboItems = [
+    { id: "coitem-1", comboId: "combo-1", menuItemId: "item-menu-1", quantity: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "coitem-2", comboId: "combo-1", menuItemId: "item-menu-4", quantity: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  ];
+  return readJsonFile<any[]>(DB_PATHS.COMBO_ITEMS, defaultComboItems);
+}
+
+
+// --- API ROUTING IMPLEMENTATION ---
+
+// Categories
+app.get("/api/v1/menu/categories", (req, res) => {
+  res.status(200).json({ success: true, data: getMenuCategories() });
+});
+
+app.post("/api/v1/menu/categories", (req, res) => {
+  const { name, description } = req.body;
+  if (!name) return res.status(400).json({ success: false, error: "El nombre de la categoría es requerido." });
+
+  const categories = getMenuCategories();
+  const newCat = {
+    id: "cat-menu-" + Math.random().toString(36).substr(2, 9),
+    name,
+    description: description || "",
+    createdAt: new Date().toISOString()
+  };
+  categories.push(newCat);
+  writeJsonFile(DB_PATHS.MENU_CATEGORIES, categories);
+  res.status(201).json({ success: true, data: newCat });
+});
+
+// Menu Items
+app.get("/api/v1/menu/items", (req, res) => {
+  const items = getMenuItems();
+  const recipes = getRecipes();
+  const categories = getMenuCategories();
+  
+  // Attach active version theoreticalCost
+  const itemsWithCost = items.map(item => {
+    const activeRec = recipes.find(r => r.menuItemId === item.id && r.isActive);
+    const cat = categories.find(c => c.id === item.categoryId);
+    return {
+      ...item,
+      categoryName: cat ? cat.name : "Otros",
+      theoreticalCost: activeRec ? activeRec.theoreticalCost : 0,
+      recipeVersion: activeRec ? activeRec.version : null,
+      foodCostPercentage: activeRec ? activeRec.foodCostPercentage : 0
+    };
+  });
+
+  res.status(200).json({ success: true, data: itemsWithCost });
+});
+
+app.post("/api/v1/menu/items", (req, res) => {
+  const { code, name, categoryId, salePrice, deductsInventory, requiresRecipe, productionArea, preparationTime, notes, imageUrl } = req.body;
+  if (!name || !categoryId || salePrice === undefined) {
+    return res.status(400).json({ success: false, error: "Nombre, categoría y precio de venta son requeridos." });
+  }
+
+  const items = getMenuItems();
+  const newId = "item-menu-" + Math.random().toString(36).substr(2, 9);
+  const newItem = {
+    id: newId,
+    code: code || "PL-" + String(items.length + 1).padStart(3, "0"),
+    name,
+    categoryId,
+    salePrice: Number(salePrice),
+    isActive: true,
+    deductsInventory: deductsInventory !== false,
+    requiresRecipe: requiresRecipe === true,
+    productionArea: productionArea || "Cocina",
+    preparationTime: Number(preparationTime || 10),
+    notes: notes || "",
+    imageUrl: imageUrl || "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  items.push(newItem);
+  writeJsonFile(DB_PATHS.MENU_ITEMS, items);
+  res.status(201).json({ success: true, data: newItem });
+});
+
+app.get("/api/v1/menu/items/:id", (req, res) => {
+  const item = getMenuItems().find(i => i.id === req.params.id);
+  if (!item) return res.status(404).json({ success: false, error: "Plato del menú no encontrado." });
+  res.status(200).json({ success: true, data: item });
+});
+
+app.patch("/api/v1/menu/items/:id", (req, res) => {
+  const items = getMenuItems();
+  const idx = items.findIndex(i => i.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Plato del menú no encontrado." });
+
+  items[idx] = {
+    ...items[idx],
+    ...req.body,
+    updatedAt: new Date().toISOString()
+  };
+  writeJsonFile(DB_PATHS.MENU_ITEMS, items);
+  res.status(200).json({ success: true, data: items[idx] });
+});
+
+app.patch("/api/v1/menu/items/:id/deactivate", (req, res) => {
+  const items = getMenuItems();
+  const idx = items.findIndex(i => i.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Plato no encontrado." });
+
+  items[idx].isActive = false;
+  items[idx].updatedAt = new Date().toISOString();
+  writeJsonFile(DB_PATHS.MENU_ITEMS, items);
+  res.status(200).json({ success: true, data: items[idx] });
+});
+
+// FICHAS TÉCNICAS
+app.get("/api/v1/menu/items/:id/recipe", (req, res) => {
+  const recipes = getRecipes();
+  // Find active recipe
+  const activeRecipe = recipes.find(r => r.menuItemId === req.params.id && r.isActive);
+  const versionQuery = req.query.version as string;
+  
+  const targetRecipe = versionQuery 
+    ? recipes.find(r => r.menuItemId === req.params.id && r.version === versionQuery)
+    : activeRecipe || recipes.find(r => r.menuItemId === req.params.id);
+
+  if (!targetRecipe) {
+    return res.status(200).json({ success: true, recipe: null, ingredients: [], allVersions: recipes.filter(r => r.menuItemId === req.params.id) });
+  }
+
+  const ingredients = getRecipeIngredients().filter(ing => ing.recipeId === targetRecipe.id);
+  const allVersions = recipes.filter(r => r.menuItemId === req.params.id);
+
+  res.status(200).json({
+    success: true,
+    recipe: targetRecipe,
+    ingredients,
+    allVersions
+  });
+});
+
+app.post("/api/v1/menu/items/:id/recipe", (req, res) => {
+  const menuItemId = req.params.id;
+  const { version, ingredients = [] } = req.body;
+
+  const recipes = getRecipes();
+  const ingredientsDb = getRecipeIngredients();
+
+  // Deactivate old active version if new is active
+  recipes.forEach(r => {
+    if (r.menuItemId === menuItemId) {
+      r.isActive = false;
+      r.activeTo = new Date().toISOString().split("T")[0];
+    }
+  });
+
+  const recipeId = "rec-menu-" + Math.random().toString(36).substr(2, 9);
+  
+  // Calculate cost
+  let sumCost = 0;
+  const processedIngredients = ingredients.map((ing: any, i: number) => {
+    const qty = Number(ing.quantity || 0);
+    const cost = Number(ing.costUnit || 0);
+    const waste = Number(ing.wastePercentage || 0);
+    const totalCost = qty * cost * (1 + waste/100);
+    sumCost += totalCost;
+
+    return {
+      id: `ing-${recipeId}-${i}`,
+      recipeId,
+      productId: ing.productId || null,
+      portionProductId: ing.portionProductId || null,
+      quantity: qty,
+      unitId: ing.unitId || "und",
+      wastePercentage: waste,
+      costUnit: cost,
+      totalCost: Math.round(totalCost * 100) / 100,
+      deductionType: ing.deductionType || "UNIT",
+      isOptional: ing.isOptional === true,
+      notes: ing.notes || "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  // Get salePrice
+  const item = getMenuItems().find(i => i.id === menuItemId);
+  const salePrice = item ? item.salePrice : 1;
+  const foodCostPercentage = Math.round((sumCost / salePrice) * 100 * 10) / 10;
+
+  const newRecipe = {
+    id: recipeId,
+    menuItemId,
+    version: version || "v" + String(recipes.filter(r => r.menuItemId === menuItemId).length + 1),
+    isActive: true,
+    activeFrom: new Date().toISOString().split("T")[0],
+    activeTo: null,
+    theoreticalCost: Math.round(sumCost * 100) / 100,
+    foodCostPercentage,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  recipes.push(newRecipe);
+  ingredientsDb.push(...processedIngredients);
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredientsDb);
+
+  res.status(201).json({
+    success: true,
+    recipe: newRecipe,
+    ingredients: processedIngredients
+  });
+});
+
+app.patch("/api/v1/recipes/:id", (req, res) => {
+  const recipes = getRecipes();
+  const idx = recipes.findIndex(r => r.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Receta/Ficha Técnica no encontrada." });
+
+  recipes[idx] = {
+    ...recipes[idx],
+    ...req.body,
+    updatedAt: new Date().toISOString()
+  };
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+  res.status(200).json({ success: true, data: recipes[idx] });
+});
+
+app.post("/api/v1/recipes/:id/activate-version", (req, res) => {
+  const recipes = getRecipes();
+  const targetId = req.params.id;
+  const target = recipes.find(r => r.id === targetId);
+  if (!target) return res.status(404).json({ success: false, error: "Receta no encontrada." });
+
+  // Deactivate all for same menu item
+  recipes.forEach(r => {
+    if (r.menuItemId === target.menuItemId) {
+      r.isActive = r.id === targetId;
+      if (r.isActive) {
+        r.activeTo = null;
+      } else {
+        r.activeTo = new Date().toISOString().split("T")[0];
+      }
+    }
+  });
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+  res.status(200).json({ success: true, message: `Clase activada correctamente para versión ${target.version}.` });
+});
+
+// Recipe Ingredients operations directly
+app.post("/api/v1/recipes/:id/ingredients", (req, res) => {
+  const recipeId = req.params.id;
+  const { productId, portionProductId, quantity, unitId, wastePercentage, costUnit, deductionType, isOptional, notes } = req.body;
+
+  const recipes = getRecipes();
+  const recipeIdx = recipes.findIndex(r => r.id === recipeId);
+  if (recipeIdx === -1) return res.status(404).json({ success: false, error: "Receta no encontrada." });
+
+  const ingredients = getRecipeIngredients();
+  const qty = Number(quantity || 0);
+  const cost = Number(costUnit || 0);
+  const waste = Number(wastePercentage || 0);
+  const totalCost = qty * cost * (1 + waste / 100);
+
+  const newIng = {
+    id: "ing-" + Math.random().toString(36).substr(2, 9),
+    recipeId,
+    productId: productId || null,
+    portionProductId: portionProductId || null,
+    quantity: qty,
+    unitId: unitId || "und",
+    wastePercentage: waste,
+    costUnit: cost,
+    totalCost: Math.round(totalCost * 100) / 100,
+    deductionType: deductionType || "UNIT",
+    isOptional: isOptional === true,
+    notes: notes || "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  ingredients.push(newIng);
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredients);
+
+  // Recalculate recipe theoretical cost
+  const recipeIngs = ingredients.filter(i => i.recipeId === recipeId);
+  const sumCost = recipeIngs.reduce((acc, i) => acc + i.totalCost, 0);
+
+  const item = getMenuItems().find(menu => menu.id === recipes[recipeIdx].menuItemId);
+  const salePrice = item ? item.salePrice : 1;
+  const foodCostPercentage = Math.round((sumCost / salePrice) * 100 * 10) / 10;
+
+  recipes[recipeIdx].theoreticalCost = Math.round(sumCost * 100) / 100;
+  recipes[recipeIdx].foodCostPercentage = foodCostPercentage;
+  recipes[recipeIdx].updatedAt = new Date().toISOString();
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+
+  res.status(201).json({ success: true, data: newIng, recipe: recipes[recipeIdx] });
+});
+
+app.patch("/api/v1/recipes/:id/ingredients/:ingredientId", (req, res) => {
+  const { id, ingredientId } = req.params;
+  const ingredients = getRecipeIngredients();
+  const idx = ingredients.findIndex(i => i.id === ingredientId && i.recipeId === id);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Ingrediente no encontrado." });
+
+  ingredients[idx] = {
+    ...ingredients[idx],
+    ...req.body,
+    updatedAt: new Date().toISOString()
+  };
+
+  const qty = Number(ingredients[idx].quantity);
+  const cost = Number(ingredients[idx].costUnit);
+  const waste = Number(ingredients[idx].wastePercentage);
+  const totalCost = qty * cost * (1 + waste / 100);
+  ingredients[idx].totalCost = Math.round(totalCost * 100) / 100;
+
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredients);
+
+  // Recalculate cost
+  const recipes = getRecipes();
+  const recipeIdx = recipes.findIndex(r => r.id === id);
+  if (recipeIdx !== -1) {
+    const recipeIngs = ingredients.filter(i => i.recipeId === id);
+    const sumCost = recipeIngs.reduce((acc, i) => acc + i.totalCost, 0);
+    const item = getMenuItems().find(menu => menu.id === recipes[recipeIdx].menuItemId);
+    const salePrice = item ? item.salePrice : 1;
+    const foodCostPercentage = Math.round((sumCost / salePrice) * 100 * 10) / 10;
+
+    recipes[recipeIdx].theoreticalCost = Math.round(sumCost * 100) / 100;
+    recipes[recipeIdx].foodCostPercentage = foodCostPercentage;
+    recipes[recipeIdx].updatedAt = new Date().toISOString();
+    writeJsonFile(DB_PATHS.RECIPES, recipes);
+  }
+
+  res.status(200).json({ success: true, data: ingredients[idx], recipe: recipes[recipeIdx] });
+});
+
+app.delete("/api/v1/recipes/:id/ingredients/:ingredientId", (req, res) => {
+  const { id, ingredientId } = req.params;
+  const ingredients = getRecipeIngredients();
+  const initialLen = ingredients.length;
+  const updatedIngs = ingredients.filter(i => !(i.id === ingredientId && i.recipeId === id));
+  
+  if (updatedIngs.length === initialLen) {
+    return res.status(404).json({ success: false, error: "Ingrediente no encontrado." });
+  }
+
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, updatedIngs);
+
+  // Recalculate cost
+  const recipes = getRecipes();
+  const recipeIdx = recipes.findIndex(r => r.id === id);
+  if (recipeIdx !== -1) {
+    const sumCost = updatedIngs.filter(i => i.recipeId === id).reduce((acc, i) => acc + i.totalCost, 0);
+    const item = getMenuItems().find(menu => menu.id === recipes[recipeIdx].menuItemId);
+    const salePrice = item ? item.salePrice : 1;
+    const foodCostPercentage = Math.round((sumCost / salePrice) * 100 * 10) / 10;
+
+    recipes[recipeIdx].theoreticalCost = Math.round(sumCost * 100) / 100;
+    recipes[recipeIdx].foodCostPercentage = foodCostPercentage;
+    recipes[recipeIdx].updatedAt = new Date().toISOString();
+    writeJsonFile(DB_PATHS.RECIPES, recipes);
+  }
+
+  res.status(200).json({ success: true, message: "Ingrediente eliminado.", recipe: recipes[recipeIdx] });
+});
+
+// Plato Aliases
+app.get("/api/v1/menu-aliases", (req, res) => {
+  res.status(200).json({ success: true, data: getMenuAliases() });
+});
+
+app.post("/api/v1/menu-aliases", (req, res) => {
+  const { rawSalesName, menuItemId, source } = req.body;
+  if (!rawSalesName || !menuItemId) {
+    return res.status(400).json({ success: false, error: "Nombre POS y Plato relacionado son requeridos." });
+  }
+
+  const aliases = getMenuAliases();
+  const newAlias = {
+    id: "alias-menu-" + Math.random().toString(36).substr(2, 9),
+    rawSalesName,
+    menuItemId,
+    source: source || "MANUAL",
+    confidenceScore: 100,
+    timesConfirmed: 1,
+    lastConfirmedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  aliases.push(newAlias);
+  writeJsonFile(DB_PATHS.MENU_ALIASES, aliases);
+  res.status(201).json({ success: true, data: newAlias });
+});
+
+app.patch("/api/v1/menu-aliases/:id", (req, res) => {
+  const aliases = getMenuAliases();
+  const idx = aliases.findIndex(a => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Alias no encontrado." });
+
+  aliases[idx] = {
+    ...aliases[idx],
+    ...req.body,
+    updatedAt: new Date().toISOString()
+  };
+  writeJsonFile(DB_PATHS.MENU_ALIASES, aliases);
+  res.status(200).json({ success: true, data: aliases[idx] });
+});
+
+// Combos
+app.get("/api/v1/combos", (req, res) => {
+  const combos = getCombos();
+  const comboItems = getComboItems();
+  const items = getMenuItems();
+
+  const details = combos.map(c => {
+    const childs = comboItems.filter(ci => ci.comboId === c.id).map(ci => {
+      const it = items.find(menu => menu.id === ci.menuItemId);
+      return {
+        ...ci,
+        itemName: it ? it.name : "Plato Desconocido",
+        unitPrice: it ? it.salePrice : 0
+      };
+    });
+    return {
+      ...c,
+      items: childs
+    };
+  });
+  res.status(200).json({ success: true, data: details });
+});
+
+app.post("/api/v1/combos", (req, res) => {
+  const { name, salePrice, items = [] } = req.body;
+  if (!name || salePrice === undefined) {
+    return res.status(400).json({ success: false, error: "Nombre del combo y precio son requeridos." });
+  }
+
+  const combos = getCombos();
+  const comboItems = getComboItems();
+
+  const comboId = "combo-" + Math.random().toString(36).substr(2, 9);
+  const newCombo = {
+    id: comboId,
+    name,
+    salePrice: Number(salePrice),
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  const processedItems = items.map((it: any) => ({
+    id: "coitem-" + Math.random().toString(36).substr(2, 9),
+    comboId,
+    menuItemId: it.menuItemId,
+    quantity: Number(it.quantity || 1),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }));
+
+  combos.push(newCombo);
+  comboItems.push(...processedItems);
+
+  writeJsonFile(DB_PATHS.COMBOS, combos);
+  writeJsonFile(DB_PATHS.COMBO_ITEMS, comboItems);
+
+  res.status(201).json({ success: true, data: { ...newCombo, items: processedItems } });
+});
+
+app.get("/api/v1/combos/:id", (req, res) => {
+  const combo = getCombos().find(c => c.id === req.params.id);
+  if (!combo) return res.status(404).json({ success: false, error: "Combo no encontrado." });
+  
+  const childs = getComboItems().filter(ci => ci.comboId === combo.id);
+  res.status(200).json({ success: true, data: { ...combo, items: childs } });
+});
+
+app.patch("/api/v1/combos/:id", (req, res) => {
+  const combos = getCombos();
+  const idx = combos.findIndex(c => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Combo no encontrado." });
+
+  combos[idx] = {
+    ...combos[idx],
+    ...req.body,
+    updatedAt: new Date().toISOString()
+  };
+  writeJsonFile(DB_PATHS.COMBOS, combos);
+
+  // If items updated
+  if (req.body.items && Array.isArray(req.body.items)) {
+    const comboItems = getComboItems().filter(ci => ci.comboId !== req.params.id);
+    const newItems = req.body.items.map((it: any) => ({
+      id: "coitem-" + Math.random().toString(36).substr(2, 9),
+      comboId: req.params.id,
+      menuItemId: it.menuItemId,
+      quantity: Number(it.quantity || 1),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+    comboItems.push(...newItems);
+    writeJsonFile(DB_PATHS.COMBO_ITEMS, comboItems);
+  }
+
+  res.status(200).json({ success: true, data: combos[idx] });
+});
+
+
+// ============================================
+// === CORE AUTOMATIC SALE DEDUCTION ENGINE ===
+// ============================================
+
+// Evaluates a single item sold and yields its cost and inventory deduction lists
+function evaluateDeductions(
+  saleItemName: string,
+  qtySold: number,
+  productsList: any[],
+  userId: string,
+  userName: string,
+  dateString: string,
+  refString: string
+) {
+  const cleanName = saleItemName.toLowerCase().trim();
+  const menuItems = getMenuItems();
+  const aliases = getMenuAliases();
+  const recipes = getRecipes();
+  const recipeIngDb = getRecipeIngredients();
+  const combos = getCombos();
+  const comboItems = getComboItems();
+
+  let matchedMenuItemId: string | null = null;
+  let matchedComboId: string | null = null;
+  let type: "MENU_ITEM" | "COMBO" | "PORTION" | "UNKNOWN" = "UNKNOWN";
+
+  // 1. Check exact menu name match
+  let foundItem = menuItems.find(i => i.name.toLowerCase().trim() === cleanName);
+  if (foundItem) {
+    matchedMenuItemId = foundItem.id;
+    type = "MENU_ITEM";
+  }
+
+  // 2. Check alias database
+  if (!matchedMenuItemId) {
+    const alias = aliases.find(a => a.rawSalesName.toLowerCase().trim() === cleanName);
+    if (alias) {
+      matchedMenuItemId = alias.menuItemId;
+      type = "MENU_ITEM";
+    }
+  }
+
+  // 3. Check exact combo name match
+  if (!matchedMenuItemId) {
+    const foundCombo = combos.find(c => c.name.toLowerCase().trim() === cleanName);
+    if (foundCombo) {
+      matchedComboId = foundCombo.id;
+      type = "COMBO";
+    }
+  }
+
+  // 4. Try similarity scores
+  if (!matchedMenuItemId && !matchedComboId) {
+    let bestScore = 0;
+    let closestItem: any = null;
+    menuItems.forEach(i => {
+      const sc = computeSimilarity(i.name, saleItemName);
+      if (sc > bestScore) {
+        bestScore = sc;
+        closestItem = i;
+      }
+    });
+
+    if (bestScore >= 75 && closestItem) {
+      matchedMenuItemId = closestItem.id;
+      type = "MENU_ITEM";
+    } else {
+      let bComboScore = 0;
+      let closestCombo: any = null;
+      combos.forEach(c => {
+        const sc = computeSimilarity(c.name, saleItemName);
+        if (sc > bComboScore) {
+          bComboScore = sc;
+          closestCombo = c;
+        }
+      });
+      if (bComboScore >= 75 && closestCombo) {
+        matchedComboId = closestCombo.id;
+        type = "COMBO";
+      }
+    }
+  }
+
+  const generatedMovements: any[] = [];
+  const generatedPortionMovements: any[] = [];
+  let theoreticalCostSum = 0;
+  let matchesResolved = false;
+  let resolvedId = "";
+  let resolvedName = saleItemName;
+  let finalUnitPrice = 0;
+
+  // Resolve matching metadata
+  if (matchedMenuItemId) {
+    const menuObj = menuItems.find(i => i.id === matchedMenuItemId);
+    if (menuObj) {
+      resolvedId = menuObj.id;
+      resolvedName = menuObj.name;
+      finalUnitPrice = menuObj.salePrice;
+      matchesResolved = true;
+    }
+  } else if (matchedComboId) {
+    const comboObj = combos.find(c => c.id === matchedComboId);
+    if (comboObj) {
+      resolvedId = comboObj.id;
+      resolvedName = comboObj.name;
+      finalUnitPrice = comboObj.salePrice;
+      matchesResolved = true;
+    }
+  }
+
+  // Action function to apply deduction for a single MenuItem
+  const applyMenuItemDeduction = (menuItemId: string, multiplier: number) => {
+    const recipe = recipes.find(r => r.menuItemId === menuItemId && r.isActive);
+    if (!recipe) {
+      // No active recipe, but can deduct directly if item name matches a product name
+      const fallbackProd = productsList.find(p => p.name.toLowerCase().trim() === cleanName);
+      if (fallbackProd) {
+        const prevStock = fallbackProd.currentStock;
+        const finalStock = Math.max(0, prevStock - multiplier);
+        fallbackProd.currentStock = finalStock;
+        theoreticalCostSum += fallbackProd.averageCost * multiplier;
+
+        generatedMovements.push({
+          id: "mov-" + Math.random().toString(36).substr(2, 9),
+          productId: fallbackProd.id,
+          productName: fallbackProd.name,
+          qty: -multiplier,
+          unitCode: fallbackProd.unitCode || "un",
+          type: "Salida",
+          quantityBefore: prevStock,
+          quantityAfter: finalStock,
+          area: "Cocina",
+          userId,
+          userName,
+          date: new Date().toISOString(),
+          reason: `Venta directa de: ${fallbackProd.name}`,
+          comment: `Descontado por venta directa. Ref: ${refString || "Ninguna"}`
+        });
+      }
+      return;
+    }
+
+    const ingredients = recipeIngDb.filter(ing => ing.recipeId === recipe.id);
+    ingredients.forEach(ing => {
+      const deductionQty = ing.quantity * multiplier;
+      
+      // Select related product
+      const pIdx = productsList.findIndex(p => p.id === ing.productId || p.id === ing.portionProductId);
+      if (pIdx !== -1) {
+        const prod = productsList[pIdx];
+        const costToAccumulate = ing.costUnit > 0 ? ing.costUnit : (prod.averageCost || 0);
+        theoreticalCostSum += costToAccumulate * deductionQty * (1 + (ing.wastePercentage || 0)/100);
+
+        if (ing.deductionType === "PORTION" || ing.portionProductId) {
+          // Subtract from portionsAvailable
+          const prevPortions = prod.portionsAvailable || 0;
+          const newPortions = Math.max(0, prevPortions - deductionQty);
+          productsList[pIdx].portionsAvailable = newPortions;
+
+          generatedPortionMovements.push({
+            id: 'pmov-' + Math.random().toString(36).substr(2, 9),
+            productId: prod.id,
+            movementType: 'PORTION_SALE',
+            quantity: -deductionQty,
+            reason: `Venta de Plato: ${resolvedName} q:${qtySold}`,
+            relatedEntityType: 'RecipeSale',
+            relatedEntityId: recipe.id,
+            userId,
+            userName,
+            comment: `Descuento automático de porciones en cocina. Ref: ${refString}`,
+            createdAt: new Date().toISOString()
+          });
+
+        } else {
+          // Normal raw stock deduction
+          const prevStock = prod.currentStock;
+          const newStock = Math.max(0, prevStock - deductionQty);
+          productsList[pIdx].currentStock = newStock;
+
+          generatedMovements.push({
+            id: "mov-" + Math.random().toString(36).substr(2, 9),
+            productId: prod.id,
+            productName: prod.name,
+            qty: -deductionQty,
+            unitCode: prod.unitId ? "un" : "un", // fallback unit
+            type: "Salida",
+            quantityBefore: prevStock,
+            quantityAfter: newStock,
+            area: "Cocina",
+            userId,
+            userName,
+            date: new Date().toISOString(),
+            reason: `Venta de Plato: ${resolvedName}`,
+            comment: `Deducción de insumos receta q:${qtySold}. Ref: ${refString}`
+          });
+        }
+      }
+    });
+  };
+
+  // Process deductions based on matched type
+  if (type === "MENU_ITEM" && matchedMenuItemId) {
+    applyMenuItemDeduction(matchedMenuItemId, qtySold);
+  } else if (type === "COMBO" && matchedComboId) {
+    const itemsOfCombo = comboItems.filter(ci => ci.comboId === matchedComboId);
+    itemsOfCombo.forEach(ci => {
+      applyMenuItemDeduction(ci.menuItemId, ci.quantity * qtySold);
+    });
+  }
+
+  return {
+    matchedId: resolvedId,
+    matchedName: resolvedName,
+    matchedType: type,
+    isMatched: matchesResolved,
+    theoreticalCost: Math.round(theoreticalCostSum * 100) / 100,
+    unitPrice: finalUnitPrice || 0,
+    generatedMovements,
+    generatedPortionMovements
+  };
+}
+
+
+// --- PROCESS SALES TICKETS OUTLET ---
+app.post("/api/v1/sales/process", (req, res) => {
+  const { saleItemName, qtySold, channel, reference, products = [], userId = "user-anon", userName = "Cocina" } = req.body;
+  if (!saleItemName || !qtySold) {
+    return res.status(400).json({ success: false, error: "Nombre del plato e importe de venta requeridos." });
+  }
+
+  const productsList = [...products];
+  const evalResult = evaluateDeductions(
+    saleItemName,
+    Number(qtySold),
+    productsList,
+    userId,
+    userName,
+    new Date().toISOString(),
+    reference || "Proceso de Venta"
+  );
+
+  const saleRecord = {
+    id: "sale-" + Math.random().toString(36).substr(2, 9),
+    date: new Date().toISOString().split("T")[0],
+    saleItemId: evalResult.matchedId,
+    saleItemType: evalResult.matchedType === "COMBO" ? "COMBO" : "MENU_ITEM",
+    saleItemName: evalResult.matchedName,
+    qtySold: Number(qtySold),
+    unitPrice: evalResult.unitPrice,
+    totalAmount: evalResult.unitPrice * Number(qtySold),
+    theoreticalCost: evalResult.theoreticalCost,
+    marginAmount: (evalResult.unitPrice * Number(qtySold)) - evalResult.theoreticalCost,
+    marginPercentage: evalResult.unitPrice > 0 ? Math.round((((evalResult.unitPrice * Number(qtySold)) - evalResult.theoreticalCost) / (evalResult.unitPrice * Number(qtySold))) * 100 * 10) / 10 : 0,
+    channel: channel || "RESTAURANT",
+    reference: reference || "",
+    status: evalResult.isMatched ? "PROCESSED" : "PENDING_MAPPING",
+    deductionsApplied: evalResult.isMatched,
+    createdAt: new Date().toISOString()
+  };
+
+  const salesDb = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+  salesDb.push(saleRecord);
+  writeJsonFile(DB_PATHS.SALES_RECORDS, salesDb);
+
+  res.status(200).json({
+    success: true,
+    saleRecord,
+    evalResult,
+    updatedProducts: productsList
+  });
+});
+
+
+// --- IMPORT EXCEL/CSV & DISCOUNTS AUTO PROCESS ---
+app.post("/api/v1/sales/import-and-deduct", (req, res) => {
+  const { fileContent, fileName, products = [], movements = [], portionMovements = [], userId = "user-anon", userName = "Administrador" } = req.body;
+
+  if (!fileContent || !fileName) {
+    return res.status(400).json({ success: false, error: "Contenido de archivo codificado y nombre son requeridos." });
+  }
+
+  try {
+    const base64Clean = fileContent.includes("base64,") ? fileContent.split("base64,")[1] : fileContent;
+    const buffer = Buffer.from(base64Clean, "base64");
+    
+    // Parse XLSX Workbook
+    const workbook = xlsx.read(buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rawRows = xlsx.utils.sheet_to_json<any>(worksheet);
+
+    if (rawRows.length === 0) {
+      return res.status(400).json({ success: false, error: "El archivo cargado está vacío o no tiene el formato correcto." });
+    }
+
+    const mutableProducts = [...products];
+    const mutableMovements = [...movements];
+    const mutablePortionMovements = [...portionMovements];
+
+    const processedSales: any[] = [];
+    const unmatchedItems: any[] = [];
+    
+    let totalSucceeded = 0;
+    let totalUnmatched = 0;
+    let totalSalesValue = 0;
+    let totalCostContribution = 0;
+
+    const salesDb = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+
+    // Read row values and map columns dynamically
+    rawRows.forEach((row, index) => {
+      let dateVal = new Date().toISOString().split("T")[0];
+      let itemVal = "";
+      let qtyVal = 1;
+      let channelVal = "RESTAURANT";
+      let refVal = "";
+      let priceVal = 0;
+
+      // Dyn search keys
+      Object.keys(row).forEach(key => {
+        const normKey = key.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (["fecha", "date", "day", "fecha_venta"].includes(normKey)) {
+          // Format excel date if numeric
+          if (typeof row[key] === "number") {
+            const dateObj = new Date((row[key] - 25569) * 86400 * 1000);
+            dateVal = dateObj.toISOString().split("T")[0];
+          } else {
+            dateVal = String(row[key]);
+          }
+        } else if (["plato", "item", "product", "menu_item", "nombre", "concepto"].includes(normKey)) {
+          itemVal = String(row[key]);
+        } else if (["cantidad", "qty", "quantity", "cant", "unidades"].includes(normKey)) {
+          qtyVal = Number(row[key] || 1);
+        } else if (["canal", "channel", "tipo_servicio"].includes(normKey)) {
+          channelVal = String(row[key]);
+        } else if (["referencia", "reference", "ref", "mesa", "ticket_pos"].includes(normKey)) {
+          refVal = String(row[key]);
+        } else if (["precio", "price", "precio_venta", "venta"].includes(normKey)) {
+          priceVal = Number(row[key] || 0);
+        }
+      });
+
+      if (!itemVal) {
+        // Fallback to first non-numeric key if columns aren't named
+        const foundStrKey = Object.keys(row).find(k => typeof row[k] === "string" && isNaN(Number(row[k])));
+        if (foundStrKey) itemVal = String(row[foundStrKey]);
+      }
+
+      if (!itemVal) return; // Skip invalid spacer lines
+
+      const deductionResult = evaluateDeductions(
+        itemVal,
+        qtyVal,
+        mutableProducts,
+        userId,
+        userName,
+        dateVal,
+        refVal || `Carga Masiva POS Row ${index + 1}`
+      );
+
+      const finalPrice = priceVal > 0 ? priceVal : (deductionResult.unitPrice || 0);
+      const rowTotal = finalPrice * qtyVal;
+      totalSalesValue += rowTotal;
+
+      const saleRecord: any = {
+        id: "sale-import-" + Math.random().toString(36).substr(2, 9),
+        date: dateVal,
+        saleItemName: itemVal,
+        saleItemId: deductionResult.matchedId || null,
+        saleItemType: deductionResult.matchedType === "COMBO" ? "COMBO" : "MENU_ITEM",
+        qtySold: qtyVal,
+        unitPrice: finalPrice,
+        totalAmount: rowTotal,
+        theoreticalCost: deductionResult.theoreticalCost,
+        marginAmount: rowTotal - deductionResult.theoreticalCost,
+        marginPercentage: rowTotal > 0 ? Math.round(((rowTotal - deductionResult.theoreticalCost)/rowTotal)*100*10)/10 : 0,
+        channel: channelVal,
+        reference: refVal || `Archivo ${fileName}`,
+        status: deductionResult.isMatched ? "PROCESSED" : "PENDING_MAPPING",
+        deductionsApplied: deductionResult.isMatched,
+        createdAt: new Date().toISOString()
+      };
+
+      processedSales.push(saleRecord);
+      salesDb.push(saleRecord);
+
+      if (deductionResult.isMatched) {
+        totalSucceeded++;
+        totalCostContribution += deductionResult.theoreticalCost;
+
+        // Merge generated movements
+        if (deductionResult.generatedMovements) {
+          mutableMovements.push(...deductionResult.generatedMovements);
+        }
+        if (deductionResult.generatedPortionMovements) {
+          mutablePortionMovements.push(...deductionResult.generatedPortionMovements);
+        }
+      } else {
+        totalUnmatched++;
+        // Record as unmatched candidate item
+        if (!unmatchedItems.some(ui => ui.rawSalesName.toLowerCase() === itemVal.toLowerCase())) {
+          unmatchedItems.push({
+            rawSalesName: itemVal,
+            count: 1
+          });
+        } else {
+          const uIdx = unmatchedItems.findIndex(ui => ui.rawSalesName.toLowerCase() === itemVal.toLowerCase());
+          unmatchedItems[uIdx].count += 1;
+        }
+      }
+    });
+
+    writeJsonFile(DB_PATHS.SALES_RECORDS, salesDb);
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        totalProcessed: processedSales.length,
+        totalSucceeded,
+        totalUnmatched,
+        salesTotalValue: totalSalesValue,
+        costTotalValue: totalCostContribution,
+        globalPercentageFoodCost: totalSalesValue > 0 ? Math.round((totalCostContribution / totalSalesValue) * 100 * 10) / 10 : 0
+      },
+      data: processedSales,
+      unmatchedItems,
+      updatedProducts: mutableProducts,
+      updatedMovements: mutableMovements,
+      updatedPortionMovements: mutablePortionMovements
+    });
+
+  } catch (err: any) {
+    console.error("XLSX parsing failed:", err);
+    res.status(500).json({ success: false, error: `Error procesando archivo de ventas: ${err.message}` });
+  }
+});
+
+// GET list of unmatched names across sales history
+app.get("/api/v1/sales/unmatched-items", (req, res) => {
+  try {
+    const sales = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+    const unmatched = sales.filter(s => s.status === "PENDING_MAPPING");
+    
+    // Group by name
+    const grouped: Record<string, { rawSalesName: string; count: number; lastDate: string }> = {};
+    unmatched.forEach(u => {
+      const name = u.saleItemName;
+      if (!grouped[name]) {
+        grouped[name] = {
+          rawSalesName: name,
+          count: u.qtySold,
+          lastDate: u.date
+        };
+      } else {
+        grouped[name].count += u.qtySold;
+        if (u.date > grouped[name].lastDate) {
+          grouped[name].lastDate = u.date;
+        }
+      }
+    });
+
+    res.status(200).json({ success: true, count: Object.keys(grouped).length, data: Object.values(grouped) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Map sales item to menu list on the fly and execute retrospect deduction adjustments
+app.post("/api/v1/sales/map-item", (req, res) => {
+  const { rawSalesName, menuItemId, products = [], movements = [], portionMovements = [] } = req.body;
+
+  if (!rawSalesName || !menuItemId) {
+    return res.status(400).json({ success: false, error: "Nombre de POS y Plato de Relacionamiento requeridos." });
+  }
+
+  try {
+    // 1. Save alias so we remember it going forward
+    const aliases = getMenuAliases();
+    const existingAliasIdx = aliases.findIndex(a => a.rawSalesName.toLowerCase().trim() === rawSalesName.toLowerCase().trim());
+    
+    let savedAlias: any;
+    if (existingAliasIdx !== -1) {
+      aliases[existingAliasIdx].menuItemId = menuItemId;
+      aliases[existingAliasIdx].timesConfirmed++;
+      aliases[existingAliasIdx].lastConfirmedAt = new Date().toISOString();
+      aliases[existingAliasIdx].updatedAt = new Date().toISOString();
+      savedAlias = aliases[existingAliasIdx];
+    } else {
+      savedAlias = {
+        id: "alias-menu-" + Math.random().toString(36).substr(2, 9),
+        rawSalesName,
+        menuItemId,
+        source: "CSV_MAPPED",
+        confidenceScore: 100,
+        timesConfirmed: 1,
+        lastConfirmedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      aliases.push(savedAlias);
+    }
+    writeJsonFile(DB_PATHS.MENU_ALIASES, aliases);
+
+    // 2. Scan pending unmatched sales with rawSalesName and retro-deduct and correct their statuses!
+    const sales = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+    const itemsToCorrect = sales.filter(s => s.status === "PENDING_MAPPING" && s.saleItemName.toLowerCase().trim() === rawSalesName.toLowerCase().trim());
+
+    const mutableProducts = [...products];
+    const mutableMovements = [...movements];
+    const mutablePortionMovements = [...portionMovements];
+
+    itemsToCorrect.forEach(s => {
+      const result = evaluateDeductions(
+        rawSalesName,
+        s.qtySold,
+        mutableProducts,
+        "mapping-admin",
+        "Mapeador de Equivalencias",
+        s.date,
+        s.reference || "Conexión Equivalencia POS"
+      );
+
+      s.saleItemId = menuItemId;
+      s.saleItemName = result.matchedName;
+      s.unitPrice = result.unitPrice;
+      s.totalAmount = result.unitPrice * s.qtySold;
+      s.theoreticalCost = result.theoreticalCost;
+      s.marginAmount = s.totalAmount - s.theoreticalCost;
+      s.marginPercentage = s.totalAmount > 0 ? Math.round(((s.totalAmount - s.theoreticalCost)/s.totalAmount)*100*10)/10 : 0;
+      s.status = "PROCESSED";
+      s.deductionsApplied = true;
+
+      if (result.isMatched) {
+        if (result.generatedMovements) mutableMovements.push(...result.generatedMovements);
+        if (result.generatedPortionMovements) mutablePortionMovements.push(...result.generatedPortionMovements);
+      }
+    });
+
+    writeJsonFile(DB_PATHS.SALES_RECORDS, sales);
+
+    res.status(200).json({
+      success: true,
+      alias: savedAlias,
+      correctedCount: itemsToCorrect.length,
+      updatedProducts: mutableProducts,
+      updatedMovements: mutableMovements,
+      updatedPortionMovements: mutablePortionMovements
+    });
 
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

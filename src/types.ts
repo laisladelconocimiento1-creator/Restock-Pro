@@ -578,5 +578,122 @@ export interface InvoiceReviewCorrection {
   createdAt: string;
 }
 
+// === ENUMS NUEVOS PARA DESCUENTO POR RECETAS ===
+export type DeductionType = 'PORTION' | 'WEIGHT' | 'VOLUME' | 'UNIT' | 'PREPARED_RECIPE';
+export type SalesItemType = 'MENU_ITEM' | 'PORTION_PRODUCT' | 'COMBO' | 'NON_INVENTORY_ITEM';
+
+// === ENTIDADES NUEVAS PARA MENÚ Y FICHAS TÉCNICAS ===
+export interface MenuCategory {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+}
+
+export interface MenuItem {
+  id: string;
+  organizationId?: string;
+  code: string;
+  name: string;
+  categoryId: string;
+  salePrice: number;
+  isActive: boolean;
+  deductsInventory: boolean;
+  requiresRecipe: boolean;
+  productionArea?: string; // e.g. 'Cocina', 'Bar'
+  preparationTime?: number; // minutes
+  notes?: string;
+  imageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MenuRecipe {
+  id: string;
+  menuItemId: string;
+  version: string; // RecipeVersion (e.g. "v1", "v2")
+  isActive: boolean;
+  activeFrom: string;
+  activeTo?: string | null;
+  theoreticalCost: number;
+  foodCostPercentage: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MenuRecipeIngredient {
+  id: string;
+  recipeId: string;
+  productId?: string | null;           // Product de inventario relacionado
+  portionProductId?: string | null;    // Product porcionado relacionado si aplica
+  quantity: number;
+  unitId: string;                      // Unidad de medida
+  wastePercentage: number;             // Merma estimada
+  costUnit: number;                    // Costo unitario
+  totalCost: number;                   // Costo total del ingrediente (con merma)
+  deductionType: DeductionType;        // Tipo de descuento
+  isOptional: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MenuItemAlias {
+  id: string;
+  rawSalesName: string;
+  menuItemId: string;
+  source: string; // e.g. 'POS', 'CSV_IMPORT'
+  confidenceScore: number;
+  timesConfirmed: number;
+  lastConfirmedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Combo {
+  id: string;
+  name: string;
+  salePrice: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ComboItem {
+  id: string;
+  comboId: string;
+  menuItemId: string;
+  quantity: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalesMenuMapping {
+  id: string;
+  rawSalesName: string;
+  menuItemId: string;
+  createdAt: string;
+}
+
+export interface SaleRecord {
+  id: string;
+  date: string;       // YYYY-MM-DD or ISO
+  saleItemId: string; // MenuItemId or ComboId or PortionProductId
+  saleItemType: SalesItemType;
+  saleItemName: string;
+  qtySold: number;
+  unitPrice: number;
+  totalAmount: number;
+  theoreticalCost: number;
+  marginAmount: number;
+  marginPercentage: number;
+  channel: string;    // e.g. RESTAURANT, DELIVERY
+  reference?: string;  // e.g. Mesa 4, Order #123
+  status: 'PROCESSED' | 'PENDING_MAPPING' | 'IGNORED';
+  deductionsApplied: boolean;
+  createdAt: string;
+}
+
+
 
 

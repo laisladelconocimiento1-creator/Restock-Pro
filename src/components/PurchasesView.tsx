@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Purchase, Product, Provider, Unit, Role, PurchaseItem, PurchaseStatus } from '../types';
 import { store } from '../data/store';
-import InvoiceOcrWizard from './InvoiceOcrWizard';
 
 interface PurchasesViewProps {
   purchases: Purchase[];
