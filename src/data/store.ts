@@ -12,7 +12,23 @@ import {
   User,
   Role,
   MovementType,
-  InventoryArea
+  InventoryArea,
+  PortionRule,
+  PortionBatch,
+  PortionMovement,
+  PortionSale,
+  PortionBatchStatus,
+  PortionMovementType,
+  SalesChannel,
+  InventoryImport,
+  InventoryImportColumn,
+  InventoryImportRow,
+  InventoryImportError,
+  InventoryImportMapping,
+  Recipe,
+  RecipeIngredient,
+  KitchenDailyClose,
+  KitchenDailyCloseItem
 } from '../types';
 import {
   mockUsers,
@@ -25,7 +41,11 @@ import {
   mockMovements,
   mockAuditLogs,
   mockPhysicalSessions,
-  mockConfig
+  mockConfig,
+  mockPortionRules,
+  mockPortionBatches,
+  mockPortionMovements,
+  mockPortionSales
 } from './mockData';
 
 // Local storage keys
@@ -41,7 +61,18 @@ const KEYS = {
   MOVEMENTS: 'restock_pro_movements',
   AUDIT_LOGS: 'restock_pro_audit_logs',
   PHYSICAL_SESSIONS: 'restock_pro_physical_sessions',
-  CONFIG: 'restock_pro_config'
+  CONFIG: 'restock_pro_config',
+  PORTION_RULES: 'restock_pro_portion_rules',
+  PORTION_BATCHES: 'restock_pro_portion_batches',
+  PORTION_MOVEMENTS: 'restock_pro_portion_movements',
+  PORTION_SALES: 'restock_pro_portion_sales',
+  INVENTORY_IMPORTS: 'restock_pro_inventory_imports',
+  INVENTORY_IMPORT_COLUMNS: 'restock_pro_inventory_import_columns',
+  INVENTORY_IMPORT_ROWS: 'restock_pro_inventory_import_rows',
+  INVENTORY_IMPORT_ERRORS: 'restock_pro_inventory_import_errors',
+  INVENTORY_IMPORT_MAPPINGS: 'restock_pro_inventory_import_mappings',
+  RECIPES: 'restock_pro__recipes',
+  DAILY_CLOSES: 'restock_pro__daily_closes'
 };
 
 // Helper to safe-parse JSON
@@ -65,7 +96,7 @@ function setLocalStorageItem<T>(key: string, value: T): void {
 
 // Check if initialized
 export function initializeStore(forceReset = false) {
-  const versionKey = 'restock_pro_clean_v3-rd';
+  const versionKey = 'restock_pro_clean_v5_recipes';
   const hasBeenCleaned = localStorage.getItem(versionKey);
 
   if (forceReset || !hasBeenCleaned) {
@@ -90,6 +121,37 @@ export function initializeStore(forceReset = false) {
     setLocalStorageItem(KEYS.AUDIT_LOGS, mockAuditLogs);
     setLocalStorageItem(KEYS.PHYSICAL_SESSIONS, mockPhysicalSessions);
     setLocalStorageItem(KEYS.CONFIG, mockConfig);
+    setLocalStorageItem(KEYS.PORTION_RULES, mockPortionRules);
+    setLocalStorageItem(KEYS.PORTION_BATCHES, mockPortionBatches);
+    setLocalStorageItem(KEYS.PORTION_MOVEMENTS, mockPortionMovements);
+    setLocalStorageItem(KEYS.PORTION_SALES, mockPortionSales);
+    setLocalStorageItem(KEYS.RECIPES, [
+      {
+        id: 'rec-1',
+        name: 'Pechuga de Pollo al Grill',
+        ingredients: [
+          { productId: 'prod-1', quantity: 1, isPortion: true }
+        ],
+        price: 350
+      },
+      {
+        id: 'rec-2',
+        name: 'Lomo Fino Premium 10oz',
+        ingredients: [
+          { productId: 'prod-2', quantity: 1, isPortion: true }
+        ],
+        price: 850
+      },
+      {
+        id: 'rec-3',
+        name: 'Filete de Salmón Chileno',
+        ingredients: [
+          { productId: 'prod-3', quantity: 1, isPortion: true }
+        ],
+        price: 750
+      }
+    ]);
+    setLocalStorageItem(KEYS.DAILY_CLOSES, []);
   }
 }
 
@@ -297,6 +359,38 @@ export const store = {
           comment: `Código de Orden: ${purchase.code}. Costo unitario: $${item.unitPrice}`,
           documentRelatedId: purchase.id
         });
+
+        // Auto-spawn PortionBatch kitchen task if product has registered portion rules
+        const rules = this.getPortionRules();
+        const rule = rules.find(r => r.productId === product.id && r.isActive && r.requiresPortioning);
+        if (rule) {
+          const baseQuantity = addedQty * rule.conversionFactor;
+          const theoreticalPortions = (baseQuantity * (rule.expectedYieldPercentage / 100)) / rule.standardPortionSize;
+          const totalCost = addedQty * item.unitPrice;
+          const estimatedCostPerPortion = theoreticalPortions > 0 ? totalCost / theoreticalPortions : 0;
+
+          this.addPortionBatch({
+            id: 'lote-' + Math.random().toString(36).substr(2, 9),
+            purchaseId: purchase.id,
+            productId: product.id,
+            quantityPurchased: addedQty,
+            purchaseUnit: this.getUnitCode(product.unitId),
+            baseQuantity,
+            baseUnit: this.getUnitCode(rule.baseUnitId),
+            standardPortionSize: rule.standardPortionSize,
+            theoreticalPortions: Math.round(theoreticalPortions * 10) / 10,
+            realPortions: 0,
+            differencePortions: 0,
+            expectedYieldPercentage: rule.expectedYieldPercentage,
+            realYieldPercentage: 0,
+            totalCost,
+            estimatedCostPerPortion: Math.round(estimatedCostPerPortion * 100) / 100,
+            realCostPerPortion: 0,
+            status: 'PENDING',
+            responsibleUserId: currentUser.id,
+            createdAt: new Date().toISOString()
+          });
+        }
       }
     });
 
@@ -494,6 +588,319 @@ export const store = {
     this.addAuditLog('ACTUALIZACIÓN_CONFIGURACIÓN', 'Configuración', `Configuración general modificada`, 'config');
   },
 
+  // === PORTION RULES ACCESSORS ===
+  getPortionRules(): PortionRule[] {
+    return getLocalStorageItem<PortionRule[]>(KEYS.PORTION_RULES, mockPortionRules);
+  },
+  savePortionRules(rules: PortionRule[]): void {
+    setLocalStorageItem(KEYS.PORTION_RULES, rules);
+  },
+  addPortionRule(rule: PortionRule): void {
+    const list = this.getPortionRules();
+    list.push(rule);
+    this.savePortionRules(list);
+    const prod = this.getProducts().find(p => p.id === rule.productId);
+    this.addAuditLog(
+      'CREACIÓN_NORMA_PORCIÓN',
+      'Porcionamiento',
+      `Creada norma de porcionamiento para ${prod ? prod.name : 'Producto ID ' + rule.productId} (Porción: ${rule.standardPortionSize} ${this.getUnitCode(rule.portionUnitId)})`,
+      rule.id
+    );
+  },
+  updatePortionRule(updated: PortionRule): void {
+    const list = this.getPortionRules().map(r => r.id === updated.id ? updated : r);
+    this.savePortionRules(list);
+    const prod = this.getProducts().find(p => p.id === updated.productId);
+    this.addAuditLog(
+      'EDICIÓN_NORMA_PORCIÓN',
+      'Porcionamiento',
+      `Actualizada norma de porcionamiento para ${prod ? prod.name : 'Producto ID ' + updated.productId}`,
+      updated.id
+    );
+  },
+  deletePortionRule(id: string): void {
+    const item = this.getPortionRules().find(r => r.id === id);
+    const list = this.getPortionRules().filter(r => r.id !== id);
+    this.savePortionRules(list);
+    if (item) {
+      const prod = this.getProducts().find(p => p.id === item.productId);
+      this.addAuditLog(
+        'ELIMINACIÓN_NORMA_PORCIÓN',
+        'Porcionamiento',
+        `Eliminada norma de porcionamiento de ${prod ? prod.name : 'Producto ID ' + item.productId}`,
+        id
+      );
+    }
+  },
+
+  // === PORTION BATCHES ACCESSORS ===
+  getPortionBatches(): PortionBatch[] {
+    return getLocalStorageItem<PortionBatch[]>(KEYS.PORTION_BATCHES, mockPortionBatches);
+  },
+  savePortionBatches(batches: PortionBatch[]): void {
+    setLocalStorageItem(KEYS.PORTION_BATCHES, batches);
+  },
+  addPortionBatch(batch: PortionBatch): void {
+    const list = this.getPortionBatches();
+    list.unshift(batch); // Newest first
+    this.savePortionBatches(list);
+    const prod = this.getProducts().find(p => p.id === batch.productId);
+    this.addAuditLog(
+      'CREACIÓN_LOTE_PORCIONAMIENTO',
+      'Porcionamiento',
+      `Registrado lote de porcionamiento ${batch.id} para ${prod ? prod.name : 'Producto'} (Materia prima: ${batch.quantityPurchased} ${batch.purchaseUnit})`,
+      batch.id
+    );
+  },
+  updatePortionBatch(updated: PortionBatch): void {
+    const list = this.getPortionBatches().map(b => b.id === updated.id ? updated : b);
+    this.savePortionBatches(list);
+  },
+  startPortionBatch(id: string): void {
+    const list = this.getPortionBatches();
+    const batch = list.find(b => b.id === id);
+    if (batch) {
+      batch.status = 'IN_PROGRESS';
+      this.savePortionBatches(list);
+      const prod = this.getProducts().find(p => p.id === batch.productId);
+      this.addAuditLog(
+        'INICIO_PORCIONAMIENTO',
+        'Porcionamiento',
+        `Iniciado proceso de porcionado físico del lote ${id} para ${prod ? prod.name : 'Producto'}`,
+        id
+      );
+    }
+  },
+  registerRealPortions(id: string, realPortions: number, comment: string, evidenceUrl?: string): void {
+    const list = this.getPortionBatches();
+    const batch = list.find(b => b.id === id);
+    if (batch) {
+      batch.realPortions = realPortions;
+      batch.differencePortions = realPortions - batch.theoreticalPortions;
+      batch.realYieldPercentage = Math.round(((realPortions * batch.standardPortionSize) / batch.baseQuantity) * 100 * 10) / 10;
+      batch.realCostPerPortion = realPortions > 0 ? Math.round((batch.totalCost / realPortions) * 100) / 100 : Math.round((batch.totalCost / batch.theoreticalPortions) * 105) / 100;
+      batch.status = 'PORTIONED';
+      batch.comment = comment;
+      if (evidenceUrl) {
+        batch.evidenceUrl = evidenceUrl;
+      }
+      this.savePortionBatches(list);
+      const prod = this.getProducts().find(p => p.id === batch.productId);
+      this.addAuditLog(
+        'REGISTRO_PORCIONES_REALES',
+        'Porcionamiento',
+        `Registrado conteo real del lote ${id} (${realPortions} porciones obtenidas de un estimado teórico de ${batch.theoreticalPortions}. Merma/dif: ${batch.differencePortions})`,
+        id,
+        JSON.stringify({ theoretical: batch.theoreticalPortions }),
+        JSON.stringify({ real: realPortions, difference: batch.differencePortions })
+      );
+    }
+  },
+  approvePortionBatch(id: string, approvedByUserId: string, approvedByUserName: string): void {
+    const list = this.getPortionBatches();
+    const batch = list.find(b => b.id === id);
+    if (batch) {
+      batch.status = 'APPROVED';
+      batch.approvedByUserId = approvedByUserId;
+      batch.approvedAt = new Date().toISOString();
+      this.savePortionBatches(list);
+
+      // Discount raw stock
+      const products = this.getProducts();
+      const productIndex = products.findIndex(p => p.id === batch.productId);
+      if (productIndex !== -1) {
+        const product = products[productIndex];
+        const prevStock = product.currentStock;
+        const newStock = Math.max(0, prevStock - batch.quantityPurchased);
+
+        // Update product stock and portions stock
+        const prevPortions = product.portionsAvailable || 0;
+        const newPortions = prevPortions + batch.realPortions;
+
+        products[productIndex] = {
+          ...product,
+          currentStock: newStock,
+          portionsAvailable: newPortions
+        };
+        setLocalStorageItem(KEYS.PRODUCTS, products);
+
+        // Log general inventory raw movement (Salida por conversión)
+        this.addMovement({
+          id: 'mov-' + Math.random().toString(36).substr(2, 9),
+          productId: product.id,
+          productName: product.name,
+          qty: -batch.quantityPurchased,
+          unitCode: this.getUnitCode(product.unitId),
+          type: 'Salida',
+          quantityBefore: prevStock,
+          quantityAfter: newStock,
+          area: 'Cocina',
+          userId: approvedByUserId,
+          userName: approvedByUserName,
+          date: new Date().toISOString(),
+          reason: `Descuento de materia prima por porcionado (${batch.id})`,
+          comment: `Se procesaron ${batch.quantityPurchased} ${batch.purchaseUnit} para producir porciones listas para cocina/venta.`,
+          documentRelatedId: batch.id
+        });
+
+        // Add Portion movement (Portions added to inventory)
+        this.addPortionMovement({
+          id: 'pmov-' + Math.random().toString(36).substr(2, 9),
+          productId: product.id,
+          portionBatchId: batch.id,
+          movementType: 'PORTION_IN',
+          quantity: batch.realPortions,
+          reason: `Aprobación de Lote de Porcionamiento ${batch.id}`,
+          relatedEntityType: 'PortionBatch',
+          relatedEntityId: batch.id,
+          userId: approvedByUserId,
+          userName: approvedByUserName,
+          comment: `Ingreso de ${batch.realPortions} porciones reales al inventario con costo de RD$${batch.realCostPerPortion} c/u.`,
+          createdAt: new Date().toISOString()
+        });
+
+        this.addAuditLog(
+          'APROBACIÓN_PORCIONAMIENTO',
+          'Porcionamiento',
+          `Aprobado lote de porcionamiento ${batch.id} por ${approvedByUserName}. Se descontó ${batch.quantityPurchased} ${batch.purchaseUnit} de materia prima e ingresó ${batch.realPortions} porciones al kárdex de porciones.`,
+          id
+        );
+      }
+    }
+  },
+  rejectPortionBatch(id: string, comment: string, chefId: string, chefName: string): void {
+    const list = this.getPortionBatches();
+    const batch = list.find(b => b.id === id);
+    if (batch) {
+      batch.status = 'REJECTED';
+      batch.comment = comment;
+      this.savePortionBatches(list);
+      this.addAuditLog(
+        'RECHAZO_PORCIONAMIENTO',
+        'Porcionamiento',
+        `Rechazado lote de porcionamiento ${id} por ${chefName}. Motivo: ${comment}`,
+        id
+      );
+    }
+  },
+
+  // === PORTION MOVEMENTS ACCESSORS ===
+  getPortionMovements(): PortionMovement[] {
+    return getLocalStorageItem<PortionMovement[]>(KEYS.PORTION_MOVEMENTS, mockPortionMovements);
+  },
+  savePortionMovements(movements: PortionMovement[]): void {
+    setLocalStorageItem(KEYS.PORTION_MOVEMENTS, movements);
+  },
+  addPortionMovement(movement: PortionMovement): void {
+    const list = this.getPortionMovements();
+    list.unshift(movement); // Newest first
+    this.savePortionMovements(list);
+
+    // Apply change to Product portionsAvailable stock
+    this.adjustPortionStock(movement.productId, movement.quantity);
+
+    const prod = this.getProducts().find(p => p.id === movement.productId);
+    this.addAuditLog(
+      'MOVIMIENTO_PORCION',
+      'Porcionamiento',
+      `Movimiento de porciones (${movement.movementType}) registrado para ${prod ? prod.name : 'Producto'}: ${movement.quantity > 0 ? '+' : ''}${movement.quantity} porciones. Motivo: ${movement.reason}`,
+      movement.id
+    );
+  },
+
+  // Adjust portion stock directly
+  adjustPortionStock(productId: string, diffQty: number): void {
+    const products = this.getProducts();
+    const index = products.findIndex(p => p.id === productId);
+    if (index !== -1) {
+      const p = products[index];
+      const prevPortions = p.portionsAvailable || 0;
+      products[index] = {
+        ...p,
+        portionsAvailable: Math.max(0, prevPortions + diffQty)
+      };
+      setLocalStorageItem(KEYS.PRODUCTS, products);
+    }
+  },
+
+  // === PORTION SALES ACCESSORS ===
+  getPortionSales(): PortionSale[] {
+    return getLocalStorageItem<PortionSale[]>(KEYS.PORTION_SALES, mockPortionSales);
+  },
+  savePortionSales(sales: PortionSale[]): void {
+    setLocalStorageItem(KEYS.PORTION_SALES, sales);
+  },
+  addPortionSale(sale: PortionSale): void {
+    const list = this.getPortionSales();
+    list.unshift(sale); // Newest first
+    this.savePortionSales(list);
+
+    // This is a direct sale, so we perform a portion discount movement!
+    const product = this.getProducts().find(p => p.id === sale.productId);
+    this.addPortionMovement({
+      id: 'pmov-' + Math.random().toString(36).substr(2, 9),
+      productId: sale.productId,
+      portionBatchId: sale.portionBatchId,
+      movementType: 'PORTION_SALE',
+      quantity: -sale.portionsSold,
+      reason: `Venta manual registrada vía canal ${sale.channel} (${sale.reference || 'Sin Ref'})`,
+      relatedEntityType: 'PortionSale',
+      relatedEntityId: sale.id,
+      userId: sale.userId,
+      userName: sale.userName,
+      comment: `Servicios cobrados. Canal: ${sale.channel}.`,
+      createdAt: new Date().toISOString()
+    });
+
+    this.addAuditLog(
+      'REGISTRO_VENTA_PORCIÓN',
+      'Cruce con Ventas',
+      `Venta registrada manual para ${product ? product.name : 'Producto ID ' + sale.productId}: -${sale.portionsSold} porciones. Canal: ${sale.channel}`,
+      sale.id
+    );
+  },
+
+  // === NEW: INVENTORY IMPORTS ACCESSORS ===
+  getInventoryImports(): InventoryImport[] {
+    return getLocalStorageItem<InventoryImport[]>(KEYS.INVENTORY_IMPORTS, []);
+  },
+  saveInventoryImports(imports: InventoryImport[]): void {
+    setLocalStorageItem(KEYS.INVENTORY_IMPORTS, imports);
+  },
+  addInventoryImport(inventoryImport: InventoryImport): void {
+    const list = this.getInventoryImports();
+    list.unshift(inventoryImport); // newest first
+    this.saveInventoryImports(list);
+  },
+  getInventoryImportColumns(importId?: string): InventoryImportColumn[] {
+    const all = getLocalStorageItem<InventoryImportColumn[]>(KEYS.INVENTORY_IMPORT_COLUMNS, []);
+    return importId ? all.filter(c => c.importId === importId) : all;
+  },
+  saveInventoryImportColumns(columns: InventoryImportColumn[]): void {
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_COLUMNS, columns);
+  },
+  getInventoryImportRows(importId?: string): InventoryImportRow[] {
+    const all = getLocalStorageItem<InventoryImportRow[]>(KEYS.INVENTORY_IMPORT_ROWS, []);
+    return importId ? all.filter(r => r.importId === importId) : all;
+  },
+  saveInventoryImportRows(rows: InventoryImportRow[]): void {
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_ROWS, rows);
+  },
+  getInventoryImportErrors(importId?: string): InventoryImportError[] {
+    const all = getLocalStorageItem<InventoryImportError[]>(KEYS.INVENTORY_IMPORT_ERRORS, []);
+    return importId ? all.filter(e => e.importId === importId) : all;
+  },
+  saveInventoryImportErrors(errors: InventoryImportError[]): void {
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_ERRORS, errors);
+  },
+  getInventoryImportMappings(importId?: string): InventoryImportMapping[] {
+    const all = getLocalStorageItem<InventoryImportMapping[]>(KEYS.INVENTORY_IMPORT_MAPPINGS, []);
+    return importId ? all.filter(m => m.importId === importId) : all;
+  },
+  saveInventoryImportMappings(mappings: InventoryImportMapping[]): void {
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_MAPPINGS, mappings);
+  },
+
   // Helper utils
   getUnitCode(unitId: string): string {
     const unit = this.getUnits().find(u => u.id === unitId);
@@ -502,5 +909,132 @@ export const store = {
   getCategoryName(categoryId: string): string {
     const cat = this.getCategories().find(c => c.id === categoryId);
     return cat ? cat.name : 'Sin categoría';
+  },
+
+  // === RECIPES ACCESSORS ===
+  getRecipes(): Recipe[] {
+    return getLocalStorageItem<Recipe[]>(KEYS.RECIPES, []);
+  },
+  saveRecipes(recipes: Recipe[]): void {
+    setLocalStorageItem(KEYS.RECIPES, recipes);
+  },
+  addRecipe(recipe: Recipe): void {
+    const list = this.getRecipes();
+    list.push(recipe);
+    this.saveRecipes(list);
+    this.addAuditLog('CREACIÓN_RECETA', 'Configuración', `Creada la receta para plato ${recipe.name}`, recipe.id);
+  },
+  deleteRecipe(id: string): void {
+    const list = this.getRecipes().filter(r => r.id !== id);
+    this.saveRecipes(list);
+    this.addAuditLog('ELIMINACIÓN_RECETA', 'Configuración', `Eliminada receta ID ${id}`, id);
+  },
+
+  // Recipe sales deductions
+  registerRecipeSale(recipeId: string, quantitySold: number, channel: SalesChannel, reference?: string): void {
+    const recipe = this.getRecipes().find(r => r.id === recipeId);
+    if (!recipe) return;
+
+    const currentUser = this.getCurrentUser();
+
+    recipe.ingredients.forEach(ing => {
+      const totalQty = ing.quantity * quantitySold;
+      if (ing.isPortion) {
+        // Deduct from portionsAvailable
+        this.addPortionMovement({
+          id: 'pmov-' + Math.random().toString(36).substr(2, 9),
+          productId: ing.productId,
+          movementType: 'PORTION_SALE',
+          quantity: -totalQty,
+          reason: `Venta de Plato: ${recipe.name} q:${quantitySold}`,
+          relatedEntityType: 'RecipeSale',
+          relatedEntityId: recipeId,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          comment: `Descuento automático de porción por venta en canal ${channel}. Ref: ${reference || 'Sin Ref'}`,
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        // Deduct from raw stock currentStock
+        const products = this.getProducts();
+        const index = products.findIndex(p => p.id === ing.productId);
+        if (index !== -1) {
+          const product = products[index];
+          const prevStock = product.currentStock;
+          const newStock = Math.max(0, prevStock - totalQty);
+
+          products[index] = {
+            ...product,
+            currentStock: newStock
+          };
+          setLocalStorageItem(KEYS.PRODUCTS, products);
+
+          this.addMovement({
+            id: 'mov-' + Math.random().toString(36).substr(2, 9),
+            productId: product.id,
+            productName: product.name,
+            qty: -totalQty,
+            unitCode: this.getUnitCode(product.unitId),
+            type: 'Salida',
+            quantityBefore: prevStock,
+            quantityAfter: newStock,
+            area: 'Cocina',
+            userId: currentUser.id,
+            userName: currentUser.name,
+            date: new Date().toISOString(),
+            reason: `Venta de Plato: ${recipe.name}`,
+            comment: `Deducción de insumos receta q:${quantitySold}. Ref: ${reference || 'Sin Ref'}`
+          });
+        }
+      }
+    });
+
+    this.addAuditLog(
+      'VENTA_RECETA',
+      'Cruce con Ventas',
+      `Registrada venta de plato/receta ${recipe.name}: ${quantitySold} unidades. Canal: ${channel}`,
+      recipe.id
+    );
+  },
+
+  // === KITCHEN DAILY CLOSE ACCESSORS ===
+  getDailyCloses(): KitchenDailyClose[] {
+    return getLocalStorageItem<KitchenDailyClose[]>(KEYS.DAILY_CLOSES, []);
+  },
+  saveDailyCloses(closes: KitchenDailyClose[]): void {
+    setLocalStorageItem(KEYS.DAILY_CLOSES, closes);
+  },
+  addDailyClose(close: KitchenDailyClose): void {
+    const list = this.getDailyCloses();
+    list.unshift(close); // Newest closes first
+    this.saveDailyCloses(list);
+
+    // After closing, we also create portion adjustments or wastes based on counted vs expected
+    close.items.forEach(item => {
+      const diff = item.physicalCountingPortions - item.expectedClosingPortions;
+      if (diff !== 0) {
+        // Register Portion Movement Adjustment!
+        this.addPortionMovement({
+          id: 'pmov-' + Math.random().toString(36).substr(2, 9),
+          productId: item.productId,
+          movementType: 'PORTION_ADJUSTMENT',
+          quantity: diff, // positive (surplus) or negative (deficit)
+          reason: `Ajuste por Cierre Diario de Cocina del día ${close.date}`,
+          relatedEntityType: 'KitchenDailyClose',
+          relatedEntityId: close.id,
+          userId: close.closedByUserId,
+          userName: close.closedByUserName,
+          comment: `Diferencia detectada en cierre: ${diff} porciones. Motivo: ${item.reason || 'Otros'}. Comentario: ${item.comment || 'Ninguno'}`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    });
+
+    this.addAuditLog(
+      'CIERRE_DIARIO_COCINA',
+      'Cierre',
+      `Cierre diario de cocina efectuado para la fecha ${close.date}. Estado: SELLADO. Dif total: ${close.items.reduce((acc, i) => acc + i.difference, 0)} porciones.`,
+      close.id
+    );
   }
 };

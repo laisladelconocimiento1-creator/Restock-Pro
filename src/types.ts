@@ -52,6 +52,7 @@ export interface Product {
   lastPrice: number;
   description: string;
   providerIds: string[]; // Provider IDs
+  portionsAvailable?: number; // Portions stock tracker
 }
 
 export type KitchenRequestStatus = 'Borrador' | 'Pendiente' | 'Aprobada' | 'Rechazada' | 'Convertida';
@@ -86,6 +87,7 @@ export interface PurchaseItem {
   tax: number;
   discount: number;
   total: number;
+  requiresPortioning?: boolean;
 }
 
 export interface Purchase {
@@ -121,7 +123,7 @@ export type InventoryArea =
   | 'Desechables'
   | 'Otro';
 
-export type MovementType = 'Entrada' | 'Salida' | 'Transferencia' | 'Ajuste' | 'Merma' | 'Devolución';
+export type MovementType = 'Entrada' | 'Salida' | 'Transferencia' | 'Ajuste' | 'Merma' | 'Devolución' | 'INITIAL_STOCK';
 
 export interface InventoryMovement {
   id: string;
@@ -191,3 +193,390 @@ export interface RestaurantConfig {
   taxRate: number; // e.g. 16 for 16% IVA
   currencySymbol: string;
 }
+
+// === PORCIONAMIENTO, RENDIMIENTO Y CONTROL CONTRA VENTAS ==
+
+export interface PortionRule {
+  id: string;
+  productId: string;
+  purchaseUnitId: string;
+  baseUnitId: string;
+  conversionFactor: number;
+  standardPortionSize: number;
+  portionUnitId: string;
+  expectedYieldPercentage: number;
+  expectedWastePercentage: number;
+  requiresPortioning: boolean;
+  sellByPortion: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PortionBatchStatus =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'PORTIONED'
+  | 'OBSERVED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CLOSED';
+
+export interface PortionBatch {
+  id: string;
+  purchaseId?: string;
+  productId: string;
+  locationId?: string;
+  quantityPurchased: number;
+  purchaseUnit: string;
+  baseQuantity: number;
+  baseUnit: string;
+  standardPortionSize: number;
+  theoreticalPortions: number;
+  realPortions: number;
+  differencePortions: number;
+  expectedYieldPercentage: number;
+  realYieldPercentage: number;
+  totalCost: number;
+  estimatedCostPerPortion: number;
+  realCostPerPortion: number;
+  status: PortionBatchStatus;
+  responsibleUserId: string;
+  approvedByUserId?: string;
+  createdAt: string;
+  approvedAt?: string;
+  comment?: string;
+  evidenceUrl?: string;
+}
+
+export type PortionMovementType =
+  | 'PORTION_IN'
+  | 'PORTION_OUT'
+  | 'PORTION_ADJUSTMENT'
+  | 'PORTION_WASTE'
+  | 'PORTION_SALE'
+  | 'PORTION_INTERNAL_CONSUMPTION'
+  | 'PORTION_RETURN';
+
+export interface PortionMovement {
+  id: string;
+  productId: string;
+  portionBatchId?: string;
+  movementType: PortionMovementType;
+  quantity: number;
+  reason: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  userId: string;
+  userName?: string;
+  comment?: string;
+  createdAt: string;
+}
+
+export type SalesChannel =
+  | 'RESTAURANT'
+  | 'DELIVERY'
+  | 'EVENT'
+  | 'INTERNAL_CONSUMPTION'
+  | 'COMPLIMENTARY'
+  | 'LOSS'
+  | 'OTHER';
+
+export interface PortionSale {
+  id: string;
+  productId: string;
+  portionBatchId?: string;
+  saleDate: string;
+  portionsSold: number;
+  channel: SalesChannel;
+  reference?: string;
+  userId: string;
+  userName?: string;
+  createdAt: string;
+}
+
+export interface PortionWaste {
+  id: string;
+  productId: string;
+  portionBatchId?: string;
+  quantity: number;
+  reason: string;
+  userId: string;
+  createdAt: string;
+}
+
+export interface ProductYield {
+  id: string;
+  productId: string;
+  batchId: string;
+  expectedPortions: number;
+  actualPortions: number;
+  yieldPercentage: number;
+  wastePercentage: number;
+  recordedAt: string;
+}
+
+export interface SalesImport {
+  id: string;
+  importedAt: string;
+  fileName: string;
+  totalRecords: number;
+  importedByUserId: string;
+}
+
+export interface SalesImportLine {
+  id: string;
+  importId: string;
+  productId: string;
+  date: string;
+  quantity: number;
+  channel: SalesChannel;
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED';
+  error?: string;
+}
+
+// === NUEVO: MÓDULO IMPORTACIÓN FLEXIBLE DE INVENTARIO DEL CLIENTE ===
+
+export type InventoryImportStatus =
+  | 'PENDING'
+  | 'UPLOADED'
+  | 'ANALYZED'
+  | 'MAPPING_REQUIRED'
+  | 'MAPPED'
+  | 'VALIDATING'
+  | 'VALIDATED'
+  | 'WITH_ERRORS'
+  | 'READY_TO_IMPORT'
+  | 'IMPORTED'
+  | 'PARTIALLY_IMPORTED'
+  | 'CANCELLED'
+  | 'FAILED';
+
+export type InventoryImportRowStatus =
+  | 'VALID'
+  | 'WARNING'
+  | 'ERROR'
+  | 'DUPLICATE'
+  | 'IMPORTED'
+  | 'SKIPPED';
+
+export type InventoryImportErrorSeverity =
+  | 'INFO'
+  | 'WARNING'
+  | 'ERROR'
+  | 'CRITICAL';
+
+export interface InventoryImport {
+  id: string;
+  organizationId?: string;
+  locationId?: string;
+  fileName: string;
+  fileType: string;
+  fileUrl?: string;
+  uploadedByUserId: string;
+  uploadedByUserName?: string;
+  status: InventoryImportStatus;
+  totalRows: number;
+  validRows: number;
+  warningRows: number;
+  errorRows: number;
+  createdProducts: number;
+  updatedProducts: number;
+  skippedRows: number;
+  totalInventoryValue: number;
+  selectedOptions: {
+    importMode: 'catalog_only' | 'catalog_stock' | 'catalog_costs' | 'all';
+    createCategories: boolean;
+    createProviders: boolean;
+    createUnits: boolean;
+    updateExistingMode: 'sku' | 'name' | 'ignore';
+  };
+  createdAt: string;
+  confirmedAt?: string;
+}
+
+export interface InventoryImportColumn {
+  id: string;
+  importId: string;
+  originalColumnName: string;
+  detectedDataType: 'string' | 'number' | 'boolean' | 'unknown';
+  sampleValues: string[];
+  suggestedSystemField: string; // Internal Field key
+  selectedSystemField: string;  // Matches Internal Field key or empty/ignored
+  confidenceScore: number;      // 0 to 100
+  ignored: boolean;
+  createdAt: string;
+}
+
+export interface InventoryImportMapping {
+  id: string;
+  importId: string;
+  originalColumnName: string;
+  systemField: string;
+  confidenceScore: number;
+  manuallyConfirmed: boolean;
+  createdAt: string;
+}
+
+export interface InventoryImportRow {
+  id: string;
+  importId: string;
+  rowNumber: number;
+  rawData: Record<string, string>;
+  normalizedData: Record<string, any>;
+  status: InventoryImportRowStatus;
+  productId?: string;
+  createdAt: string;
+}
+
+export interface InventoryImportError {
+  id: string;
+  importId: string;
+  rowId?: string;
+  rowNumber: number;
+  columnName: string;
+  receivedValue: string;
+  errorMessage: string;
+  suggestion: string;
+  severity: InventoryImportErrorSeverity;
+  createdAt: string;
+}
+
+// === NUEVO: RECETAS, COCIERRE Y FLUJO OPERATIVO DIARIO ===
+
+export interface RecipeIngredient {
+  productId: string; // Product id
+  quantity: number; // e.g. 1 portion or 0.5 units
+  isPortion: boolean; // True if it discounts portionsAvailable, false if it discounts standard currentStock
+}
+
+export interface Recipe {
+  id: string;
+  name: string; // e.g. "Fajita de Pollo", "Filete Mignon"
+  ingredients: RecipeIngredient[];
+  price: number;
+}
+
+export interface KitchenDailyCloseItem {
+  productId: string;
+  productName: string;
+  initialPortions: number;
+  producedPortions: number;
+  soldPortions: number;
+  wastedPortions: number;
+  internalConsumptionPortions: number;
+  courtesyPortions: number;
+  adjustedPortions: number;
+  expectedClosingPortions: number;
+  physicalCountingPortions: number;
+  difference: number;
+  differenceValue: number;
+  reason?: 'Errores de conteo' | 'Consumo no registrado' | 'Robo/pérdida' | 'Daño de producto' | 'Otros';
+  comment?: string;
+}
+
+export interface KitchenDailyClose {
+  id: string;
+  date: string; // YYYY-MM-DD
+  closedAt: string;
+  closedByUserId: string;
+  closedByUserName: string;
+  items: KitchenDailyCloseItem[];
+  isClosed: boolean;
+  notes?: string;
+}
+
+// === ENUMS/TYPES NUEVOS PARA OCR DE FACTURAS ===
+export type InvoiceOcrStatus =
+  | 'INVOICE_UPLOADED'
+  | 'ANALYZING'
+  | 'ANALYZED'
+  | 'REQUIRES_REVIEW'
+  | 'REVIEWED'
+  | 'CONFIRMED'
+  | 'ERROR'
+  | 'CANCELLED';
+
+export type InvoiceLineStatus =
+  | 'MATCHED'
+  | 'NEEDS_REVIEW'
+  | 'NEW_PRODUCT'
+  | 'IGNORED'
+  | 'NON_INVENTORY_EXPENSE';
+
+// === ENTIDADES NUEVAS PARA OCR DE FACTURAS ===
+export interface InvoiceOcrJob {
+  id: string;
+  purchaseId?: string | null;
+  fileId: string;
+  status: InvoiceOcrStatus;
+  startedAt: string;
+  completedAt?: string | null;
+  errorMessage?: string | null;
+  confidenceScore?: number | null;
+  createdByUserId: string;
+}
+
+export interface InvoiceOcrResult {
+  id: string;
+  ocrJobId: string;
+  supplierName?: string | null;
+  supplierTaxId?: string | null;
+  invoiceNumber?: string | null;
+  ncf?: string | null;
+  invoiceDate?: string | null;
+  dueDate?: string | null;
+  subtotal?: number | null;
+  discountTotal?: number | null;
+  taxTotal?: number | null;
+  total?: number | null;
+  currency?: string | null;
+  paymentTerms?: string | null;
+  rawText?: string | null;
+  confidenceScore?: number | null;
+  createdAt: string;
+}
+
+export interface InvoiceOcrLine {
+  id: string;
+  ocrResultId: string;
+  rawDescription: string;
+  detectedProductCode?: string | null;
+  detectedQuantity: number;
+  detectedUnit?: string | null;
+  detectedUnitPrice: number;
+  detectedDiscount?: number | null;
+  detectedTax?: number | null;
+  detectedSubtotal: number;
+  detectedTotal: number;
+  matchedProductId?: string | null;
+  matchConfidence?: number | null; // e.g. 0 to 100 percentage
+  lineStatus: InvoiceLineStatus;
+  createdAt: string;
+}
+
+export interface SupplierProductAlias {
+  id: string;
+  supplierId: string;
+  rawSupplierDescription: string;
+  productId: string;
+  unitId?: string | null;
+  confidenceScore: number;
+  timesConfirmed: number;
+  lastConfirmedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceReviewCorrection {
+  id: string;
+  ocrJobId: string;
+  fieldName: string;
+  originalValue: string;
+  correctedValue: string;
+  correctedByUserId: string;
+  createdAt: string;
+}
+
+
+

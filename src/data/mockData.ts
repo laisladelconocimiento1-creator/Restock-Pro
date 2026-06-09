@@ -9,7 +9,11 @@ import {
   AuditLog,
   PhysicalSession,
   RestaurantConfig,
-  User
+  User,
+  PortionRule,
+  PortionBatch,
+  PortionMovement,
+  PortionSale
 } from '../types';
 
 export const mockUsers: User[] = [
@@ -52,7 +56,7 @@ export const mockUsers: User[] = [
 
 export const mockCategories: Category[] = [
   { id: 'cat-1', name: 'Carnes y Aves', description: 'Cortes premium de res, cerdo, pollo e ingredientes carnes.' },
-  { id: 'cat-2', name: 'Vegetales y Frutas', description: 'Insumos frescos del mercadillo local, legumbres y frutas.' },
+  { id: 'cat-2', name: 'Vegetales y Frutas', description: 'Insumos frescos del mercadillo local, legumbres and frutas.' },
   { id: 'cat-3', name: 'Lácteos y Quesos', description: 'Leche, quesos, cremas, mantequilla y derivados.' },
   { id: 'cat-4', name: 'Almacén y Abarrotes', description: 'Harinas, aceites, especias, salsas y pastas.' },
   { id: 'cat-5', name: 'Bebidas e Alcohol', description: 'Refrescos, aguas minerales, destilados, vinos y cerveza.' },
@@ -65,18 +69,302 @@ export const mockUnits: Unit[] = [
   { id: 'uni-2', code: 'l', name: 'Litros' },
   { id: 'uni-3', code: 'pz', name: 'Piezas' },
   { id: 'uni-4', code: 'lata', name: 'Lata' },
-  { id: 'uni-5', code: 'caja', name: 'Caja' }
+  { id: 'uni-5', code: 'caja', name: 'Caja' },
+  { id: 'uni-6', code: 'oz', name: 'Onzas' },
+  { id: 'uni-7', code: 'g', name: 'Gramos' },
+  { id: 'uni-8', code: 'ml', name: 'Mililitros' },
+  { id: 'uni-9', code: 'porc', name: 'Porciones' }
 ];
 
-export const mockProviders: Provider[] = [];
+export const mockProviders: Provider[] = [
+  {
+    id: 'prov-1',
+    name: 'Distribuidora de Carnes Nacional',
+    rfc: 'DCN091218AA3',
+    contactName: 'Ing. Mercedes Valenzuela',
+    phone: '809-555-0199',
+    email: 'contacto@carnesnacionales.com',
+    address: 'Av. Abraham Lincoln, Santo Domingo, RD',
+    categories: ['cat-1'],
+    rating: 5
+  }
+];
 
-export const mockProducts: Product[] = [];
+export const mockProducts: Product[] = [
+  {
+    id: 'prod-1',
+    name: 'Filete de Pollo Pechuga',
+    categoryId: 'cat-1',
+    unitId: 'uni-1',
+    currentStock: 20, // 20 libras
+    minStock: 10,
+    maxStock: 80,
+    averageCost: 120, // RD$120 por libra
+    lastPrice: 120,
+    description: 'Pechuga de pollo fresca lista para porcionar en filetes estándares para plancha.',
+    providerIds: ['prov-1'],
+    portionsAvailable: 16 // 38 producidas - 15 vendidas - 2 consumo personal - 5 ventas delivery
+  },
+  {
+    id: 'prod-2',
+    name: 'Corte de Res Lomo Angus',
+    categoryId: 'cat-1',
+    unitId: 'uni-1',
+    currentStock: 15,
+    minStock: 5,
+    maxStock: 40,
+    averageCost: 450,
+    lastPrice: 450,
+    description: 'Lomo fino de res Angus importado para cortes de medallón gourmet.',
+    providerIds: ['prov-1'],
+    portionsAvailable: 0
+  },
+  {
+    id: 'prod-3',
+    name: 'Salmón Atlántico Fresco',
+    categoryId: 'cat-1',
+    unitId: 'uni-1',
+    currentStock: 10,
+    minStock: 5,
+    maxStock: 30,
+    averageCost: 550,
+    lastPrice: 550,
+    description: 'Filetes de salmón de acuicultura noruega para porcionamiento sashimi o grill.',
+    providerIds: ['prov-1'],
+    portionsAvailable: 0
+  }
+];
 
 export const mockKitchenRequests: KitchenRequest[] = [];
 
-export const mockPurchases: Purchase[] = [];
+export const mockPurchases: Purchase[] = [
+  {
+    id: 'purch-1',
+    code: 'OC-20260601',
+    date: '2026-06-01T15:30:00Z',
+    providerId: 'prov-1',
+    providerName: 'Distribuidora de Carnes Nacional',
+    items: [
+      { productId: 'prod-1', qty: 20, unitPrice: 120, subtotal: 2400, tax: 432, discount: 0, total: 2832 }
+    ],
+    subtotal: 2400,
+    tax: 432,
+    discounts: 0,
+    total: 2832,
+    invoiceNumber: 'B1500000213',
+    invoiceDate: '2026-06-01',
+    receivedDate: '2026-06-01T17:00:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Transferencia',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  }
+];
 
-export const mockMovements: InventoryMovement[] = [];
+export const mockMovements: InventoryMovement[] = [
+  {
+    id: 'mov-init-chicken',
+    productId: 'prod-1',
+    productName: 'Filete de Pollo Pechuga',
+    qty: 20,
+    unitCode: 'lb',
+    type: 'Entrada',
+    quantityBefore: 0,
+    quantityAfter: 20,
+    area: 'Almacén seco',
+    userId: 'usr-3',
+    userName: 'Roberto Dávila',
+    date: '2026-06-01T17:00:00Z',
+    reason: 'Compra RECIBIDA (B1500000213)',
+    comment: 'Lote de pechugas recibido para porcionado inmediato.',
+    documentRelatedId: 'purch-1'
+  }
+];
+
+export const mockPortionRules: PortionRule[] = [
+  {
+    id: 'rule-1',
+    productId: 'prod-1',
+    purchaseUnitId: 'uni-1', // lb
+    baseUnitId: 'uni-6', // oz
+    conversionFactor: 16, // 1 lb = 16 oz
+    standardPortionSize: 8, // 8 oz de filete de pollo por porción
+    portionUnitId: 'uni-9', // porc
+    expectedYieldPercentage: 95,
+    expectedWastePercentage: 5,
+    requiresPortioning: true,
+    sellByPortion: true,
+    isActive: true,
+    createdAt: '2026-06-01T08:00:00Z',
+    updatedAt: '2026-06-01T08:00:00Z'
+  },
+  {
+    id: 'rule-2',
+    productId: 'prod-2',
+    purchaseUnitId: 'uni-1', // lb
+    baseUnitId: 'uni-6', // oz
+    conversionFactor: 16,
+    standardPortionSize: 10, // 10 oz de lomo fino
+    portionUnitId: 'uni-9',
+    expectedYieldPercentage: 90,
+    expectedWastePercentage: 10,
+    requiresPortioning: true,
+    sellByPortion: true,
+    isActive: true,
+    createdAt: '2026-06-01T08:00:00Z',
+    updatedAt: '2026-06-01T08:00:00Z'
+  },
+  {
+    id: 'rule-3',
+    productId: 'prod-3',
+    purchaseUnitId: 'uni-1',
+    baseUnitId: 'uni-6',
+    conversionFactor: 16,
+    standardPortionSize: 6, // 6 oz de lomo
+    portionUnitId: 'uni-9',
+    expectedYieldPercentage: 85,
+    expectedWastePercentage: 15,
+    requiresPortioning: true,
+    sellByPortion: true,
+    isActive: true,
+    createdAt: '2026-06-01T08:00:00Z',
+    updatedAt: '2026-06-01T08:00:00Z'
+  }
+];
+
+export const mockPortionBatches: PortionBatch[] = [
+  {
+    id: 'batch-1',
+    purchaseId: 'purch-1',
+    productId: 'prod-1',
+    quantityPurchased: 20,
+    purchaseUnit: 'lb',
+    baseQuantity: 320,
+    baseUnit: 'oz',
+    standardPortionSize: 8,
+    theoreticalPortions: 40,
+    realPortions: 38,
+    differencePortions: -2,
+    expectedYieldPercentage: 95,
+    realYieldPercentage: 95,
+    totalCost: 2400,
+    estimatedCostPerPortion: 60,
+    realCostPerPortion: 63.16,
+    status: 'APPROVED',
+    responsibleUserId: 'usr-4',
+    approvedByUserId: 'usr-1',
+    createdAt: '2026-06-01T18:00:00Z',
+    approvedAt: '2026-06-01T18:30:00Z',
+    comment: 'Pérdida por recorte de tendones grasosos. Autorizado por Chef.',
+    evidenceUrl: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=300&q=80'
+  },
+  {
+    id: 'batch-2',
+    productId: 'prod-2',
+    quantityPurchased: 10,
+    purchaseUnit: 'lb',
+    baseQuantity: 160,
+    baseUnit: 'oz',
+    standardPortionSize: 10,
+    theoreticalPortions: 16,
+    realPortions: 0,
+    differencePortions: 0,
+    expectedYieldPercentage: 90,
+    realYieldPercentage: 0,
+    totalCost: 4500,
+    estimatedCostPerPortion: 281.25,
+    realCostPerPortion: 281.25,
+    status: 'PENDING',
+    responsibleUserId: 'usr-4',
+    createdAt: '2026-06-08T10:00:00Z'
+  }
+];
+
+export const mockPortionMovements: PortionMovement[] = [
+  {
+    id: 'pmov-1',
+    productId: 'prod-1',
+    portionBatchId: 'batch-1',
+    movementType: 'PORTION_IN',
+    quantity: 38,
+    reason: 'Aprobación de Lote de Porcionamiento batch-1',
+    relatedEntityType: 'PortionBatch',
+    relatedEntityId: 'batch-1',
+    userId: 'usr-1',
+    userName: 'Carlos Mendoza',
+    comment: '38 porciones ingresadas con costo RD$63.16 por porción.',
+    createdAt: '2026-06-01T18:30:00Z'
+  },
+  {
+    id: 'pmov-2',
+    productId: 'prod-1',
+    portionBatchId: 'batch-1',
+    movementType: 'PORTION_SALE',
+    quantity: -15,
+    reason: 'Venta manual de 15 porciones',
+    relatedEntityType: 'PortionSale',
+    relatedEntityId: 'psale-1',
+    userId: 'usr-2',
+    userName: 'Ana María Gómez',
+    comment: 'Descuento por servicios en salón.',
+    createdAt: '2026-06-02T14:30:00Z'
+  },
+  {
+    id: 'pmov-3',
+    productId: 'prod-1',
+    portionBatchId: 'batch-1',
+    movementType: 'PORTION_INTERNAL_CONSUMPTION',
+    quantity: -2,
+    reason: 'Consumo interno (Cena de personal)',
+    relatedEntityType: 'PortionMovement',
+    relatedEntityId: 'pmov-3',
+    userId: 'usr-4',
+    userName: 'Chef Fabián Ríos',
+    comment: 'Autorizado por cocina.',
+    createdAt: '2026-06-03T21:00:00Z'
+  },
+  {
+    id: 'pmov-4',
+    productId: 'prod-1',
+    portionBatchId: 'batch-1',
+    movementType: 'PORTION_SALE',
+    quantity: -5,
+    reason: 'Venta manual de 5 porciones',
+    relatedEntityType: 'PortionSale',
+    relatedEntityId: 'psale-2',
+    userId: 'usr-2',
+    userName: 'Ana María Gómez',
+    comment: 'Servido via Delivery.',
+    createdAt: '2026-06-05T20:00:00Z'
+  }
+];
+
+export const mockPortionSales: PortionSale[] = [
+  {
+    id: 'psale-1',
+    productId: 'prod-1',
+    portionBatchId: 'batch-1',
+    saleDate: '2026-06-02T14:30:00Z',
+    portionsSold: 15,
+    channel: 'RESTAURANT',
+    reference: 'Ticket #1024',
+    userId: 'usr-2',
+    userName: 'Ana María Gómez',
+    createdAt: '2026-06-02T14:30:00Z'
+  },
+  {
+    id: 'psale-2',
+    productId: 'prod-1',
+    portionBatchId: 'batch-1',
+    saleDate: '2026-06-05T20:00:00Z',
+    portionsSold: 5,
+    channel: 'DELIVERY',
+    reference: 'PedidosYa #8843',
+    userId: 'usr-2',
+    userName: 'Ana María Gómez',
+    createdAt: '2026-06-05T20:00:00Z'
+  }
+];
 
 export const mockAuditLogs: AuditLog[] = [
   {
@@ -103,3 +391,4 @@ export const mockConfig: RestaurantConfig = {
   taxRate: 18, // ITBIS estándar en RD
   currencySymbol: 'RD$'
 };
+

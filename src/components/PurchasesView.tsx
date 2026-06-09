@@ -17,6 +17,8 @@ import {
   Link2
 } from 'lucide-react';
 import { Purchase, Product, Provider, Unit, Role, PurchaseItem, PurchaseStatus } from '../types';
+import { store } from '../data/store';
+import InvoiceOcrWizard from './InvoiceOcrWizard';
 
 interface PurchasesViewProps {
   purchases: Purchase[];
@@ -48,6 +50,7 @@ export default function PurchasesView({
   // Navigation
   const [activeView, setActiveView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [showOcrWizard, setShowOcrWizard] = useState(false);
 
   // New Purchase Form states
   const [selectedProviderId, setSelectedProviderId] = useState('');
@@ -108,7 +111,7 @@ export default function PurchasesView({
     setPurchaseItems(purchaseItems.filter((_, i) => i !== index));
   };
 
-  const handleRowChange = (index: number, field: 'productId' | 'qty' | 'unitPrice', value: any) => {
+  const handleRowChange = (index: number, field: 'productId' | 'qty' | 'unitPrice' | 'requiresPortioning', value: any) => {
     const updated = [...purchaseItems];
     if (field === 'productId') {
       updated[index].productId = value;
@@ -116,13 +119,18 @@ export default function PurchasesView({
       const prod = products.find(p => p.id === value);
       if (prod) {
         updated[index].unitPrice = prod.lastPrice;
+        // Auto check if product requires portioning
+        const rules = store.getPortionRules();
+        updated[index].requiresPortioning = rules.some(r => r.productId === value && r.requiresPortioning);
       }
     } else if (field === 'qty') {
       updated[index].qty = Math.max(0.1, Number(value));
-    } else {
+    } else if (field === 'unitPrice') {
       updated[index].unitPrice = Math.max(0, Number(value));
+    } else if (field === 'requiresPortioning') {
+      updated[index].requiresPortioning = !!value;
     }
-    setPurchaseItems(updated);
+    setPurchaseItems(updated as any);
   };
 
   // Mocking Invoice file uploads
@@ -191,7 +199,8 @@ export default function PurchasesView({
         subtotal: sub,
         tax: t,
         discount: 0,
-        total: sub + t
+        total: sub + t,
+        requiresPortioning: (item as any).requiresPortioning
       };
     });
 
@@ -651,6 +660,20 @@ export default function PurchasesView({
                           className="w-full bg-transparent p-1 text-right font-mono font-bold"
                         />
                       </div>
+                    </div>
+
+                    {/* Portioning requirements flag */}
+                    <div className="w-20 flex flex-col items-center">
+                      <span className="text-[9px] block text-slate-400 font-bold uppercase">Porcionar</span>
+                      <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={!!(row as any).requiresPortioning}
+                          onChange={(e) => handleRowChange(index, 'requiresPortioning', e.target.checked)}
+                          className="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 cursor-pointer border-slate-300"
+                        />
+                        <span className="text-[10px] text-slate-500 font-bold">{(row as any).requiresPortioning ? 'Sí' : 'No'}</span>
+                      </label>
                     </div>
 
                     {/* Total Row */}

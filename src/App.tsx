@@ -32,6 +32,8 @@ import ReportsView from './components/ReportsView';
 import UsersRolesView from './components/UsersRolesView';
 import ConfigurationView from './components/ConfigurationView';
 import LoginView from './components/LoginView';
+import PortionManagementView from './components/PortionManagementView';
+import InventoryImportView from './components/InventoryImportView';
 
 export default function App() {
   // Initialize general LocalStorage structures on construct
@@ -375,6 +377,27 @@ export default function App() {
               config={config}
               currentUserRole={currentUser.role}
               onUpdateConfig={handleUpdateConfig}
+            />
+          )}
+
+          {activeModule === 'Porcionamiento' && (
+            <PortionManagementView
+              products={products}
+              categories={categories}
+              units={units}
+              currentUser={currentUser}
+              onReloadData={reloadAllDataFromStore}
+            />
+          )}
+
+          {activeModule === 'Importar lista de inventario' && (
+            <InventoryImportView
+              products={products}
+              categories={categories}
+              units={units}
+              providers={providers}
+              currentUser={currentUser}
+              onReloadAllData={reloadAllDataFromStore}
             />
           )}
 
