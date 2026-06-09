@@ -87,6 +87,17 @@ export const mockProviders: Provider[] = [
     address: 'Av. Abraham Lincoln, Santo Domingo, RD',
     categories: ['cat-1'],
     rating: 5
+  },
+  {
+    id: 'prov-2',
+    name: 'Pollos del Caribe',
+    rfc: 'PDC980721BB4',
+    contactName: 'Juan Carlos Gómez',
+    phone: '809-555-0245',
+    email: 'ventas@pollosdelcaribe.com.do',
+    address: 'Carr. Mella Km 8.5, Santo Domingo Este, RD',
+    categories: ['cat-1'],
+    rating: 4
   }
 ];
 
@@ -102,7 +113,7 @@ export const mockProducts: Product[] = [
     averageCost: 120, // RD$120 por libra
     lastPrice: 120,
     description: 'Pechuga de pollo fresca lista para porcionar en filetes estándares para plancha.',
-    providerIds: ['prov-1'],
+    providerIds: ['prov-1', 'prov-2'],
     portionsAvailable: 16 // 38 producidas - 15 vendidas - 2 consumo personal - 5 ventas delivery
   },
   {
@@ -116,7 +127,7 @@ export const mockProducts: Product[] = [
     averageCost: 450,
     lastPrice: 450,
     description: 'Lomo fino de res Angus importado para cortes de medallón gourmet.',
-    providerIds: ['prov-1'],
+    providerIds: ['prov-1', 'prov-2'],
     portionsAvailable: 0
   },
   {
@@ -130,7 +141,7 @@ export const mockProducts: Product[] = [
     averageCost: 550,
     lastPrice: 550,
     description: 'Filetes de salmón de acuicultura noruega para porcionamiento sashimi o grill.',
-    providerIds: ['prov-1'],
+    providerIds: ['prov-1', 'prov-2'],
     portionsAvailable: 0
   }
 ];
@@ -154,6 +165,195 @@ export const mockPurchases: Purchase[] = [
     invoiceNumber: 'B1500000213',
     invoiceDate: '2026-06-01',
     receivedDate: '2026-06-01T17:00:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Transferencia',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  },
+  {
+    id: 'purch-2',
+    code: 'OC-20260602',
+    date: '2026-06-02T10:00:00Z',
+    providerId: 'prov-1',
+    providerName: 'Distribuidora de Carnes Nacional',
+    items: [
+      { productId: 'prod-1', qty: 80, unitPrice: 115, subtotal: 9200, tax: 1656, discount: 0, total: 10856 }
+    ],
+    subtotal: 9200,
+    tax: 1656,
+    discounts: 0,
+    total: 10856,
+    invoiceNumber: 'B1500000214',
+    invoiceDate: '2026-06-02',
+    receivedDate: '2026-06-02T11:30:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Transferencia',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  },
+  {
+    id: 'purch-3',
+    code: 'OC-20260608',
+    date: '2026-06-08T11:00:00Z',
+    providerId: 'prov-2',
+    providerName: 'Pollos del Caribe',
+    items: [
+      { productId: 'prod-1', qty: 40, unitPrice: 130, subtotal: 5200, tax: 936, discount: 0, total: 6136 }
+    ],
+    subtotal: 5200,
+    tax: 936,
+    discounts: 0,
+    total: 6136,
+    invoiceNumber: 'FC-105524',
+    invoiceDate: '2026-06-08',
+    receivedDate: '2026-06-08T12:00:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Transferencia',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  },
+  {
+    id: 'purch-4',
+    code: 'OC-20260615',
+    date: '2026-06-15T09:15:00Z',
+    providerId: 'prov-1',
+    providerName: 'Distribuidora de Carnes Nacional',
+    items: [
+      { productId: 'prod-1', qty: 25, unitPrice: 118, subtotal: 2950, tax: 531, discount: 0, total: 3481 }
+    ],
+    subtotal: 2950,
+    tax: 531,
+    discounts: 0,
+    total: 3481,
+    invoiceNumber: 'B1500000218',
+    invoiceDate: '2026-06-15',
+    receivedDate: '2026-06-15T11:00:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Efectivo',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  },
+  {
+    id: 'purch-5',
+    code: 'OC-20260622',
+    date: '2026-06-22T14:45:00Z',
+    providerId: 'prov-2',
+    providerName: 'Pollos del Caribe',
+    items: [
+      { productId: 'prod-1', qty: 35, unitPrice: 132, subtotal: 4620, tax: 831.6, discount: 0, total: 5451.6 }
+    ],
+    subtotal: 4620,
+    tax: 831.6,
+    discounts: 0,
+    total: 5451.6,
+    invoiceNumber: 'FC-105680',
+    invoiceDate: '2026-06-22',
+    receivedDate: '2026-06-22T16:00:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Crédito',
+    creatorId: 'usr-2',
+    creatorName: 'Ana Valeria'
+  },
+  {
+    id: 'purch-6',
+    code: 'OC-20260605',
+    date: '2026-06-05T08:00:00Z',
+    providerId: 'prov-1',
+    providerName: 'Distribuidora de Carnes Nacional',
+    items: [
+      { productId: 'prod-2', qty: 30, unitPrice: 450, subtotal: 13500, tax: 2430, discount: 0, total: 15930 }
+    ],
+    subtotal: 13500,
+    tax: 2430,
+    discounts: 0,
+    total: 15930,
+    invoiceNumber: 'B1500000215',
+    invoiceDate: '2026-06-05',
+    receivedDate: '2026-06-05T09:30:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Transferencia',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  },
+  {
+    id: 'purch-7',
+    code: 'OC-20260612',
+    date: '2026-06-12T10:30:00Z',
+    providerId: 'prov-2',
+    providerName: 'Pollos del Caribe',
+    items: [
+      { productId: 'prod-2', qty: 15, unitPrice: 480, subtotal: 7200, tax: 1296, discount: 0, total: 8496 }
+    ],
+    subtotal: 7200,
+    tax: 1296,
+    discounts: 0,
+    total: 8496,
+    invoiceNumber: 'FC-105599',
+    invoiceDate: '2026-06-12',
+    receivedDate: '2026-06-12T11:45:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Crédito',
+    creatorId: 'usr-2',
+    creatorName: 'Ana Valeria'
+  },
+  {
+    id: 'purch-8',
+    code: 'OC-20260618',
+    date: '2026-06-18T11:15:00Z',
+    providerId: 'prov-1',
+    providerName: 'Distribuidora de Carnes Nacional',
+    items: [
+      { productId: 'prod-3', qty: 12, unitPrice: 550, subtotal: 6600, tax: 1188, discount: 0, total: 7788 }
+    ],
+    subtotal: 6600,
+    tax: 1188,
+    discounts: 0,
+    total: 7788,
+    invoiceNumber: 'B1500000222',
+    invoiceDate: '2026-06-18',
+    receivedDate: '2026-06-18T13:00:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Efectivo',
+    creatorId: 'usr-3',
+    creatorName: 'Roberto Dávila'
+  },
+  {
+    id: 'purch-9',
+    code: 'OC-20260625',
+    date: '2026-06-25T15:00:00Z',
+    providerId: 'prov-2',
+    providerName: 'Pollos del Caribe',
+    items: [
+      { productId: 'prod-3', qty: 10, unitPrice: 590, subtotal: 5900, tax: 1062, discount: 0, total: 6962 }
+    ],
+    subtotal: 5900,
+    tax: 1062,
+    discounts: 0,
+    total: 6962,
+    invoiceNumber: 'FC-105740',
+    invoiceDate: '2026-06-25',
+    receivedDate: '2026-06-25T16:30:00Z',
+    status: 'Recibida',
+    paymentMethod: 'Crédito',
+    creatorId: 'usr-2',
+    creatorName: 'Ana Valeria'
+  },
+  {
+    id: 'purch-10',
+    code: 'OC-20260520',
+    date: '2026-05-20T10:00:00Z',
+    providerId: 'prov-1',
+    providerName: 'Distribuidora de Carnes Nacional',
+    items: [
+      { productId: 'prod-1', qty: 50, unitPrice: 110, subtotal: 5500, tax: 990, discount: 0, total: 6490 }
+    ],
+    subtotal: 5500,
+    tax: 990,
+    discounts: 0,
+    total: 6490,
+    invoiceNumber: 'B1500000195',
+    invoiceDate: '2026-05-20',
+    receivedDate: '2026-05-20T11:00:00Z',
     status: 'Recibida',
     paymentMethod: 'Transferencia',
     creatorId: 'usr-3',

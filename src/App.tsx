@@ -331,6 +331,9 @@ export default function App() {
             <PurchaseBookView
               purchases={purchases}
               providers={providers}
+              products={products}
+              units={units}
+              categories={categories}
               onViewPurchase={handleViewPurchaseInComprasBook}
             />
           )}

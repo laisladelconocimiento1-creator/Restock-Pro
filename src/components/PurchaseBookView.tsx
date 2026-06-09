@@ -1,393 +1,577 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  BookOpen,
-  Search,
-  Filter,
-  FileSpreadsheet,
-  Calendar,
-  User,
-  ExternalLink,
-  Tag,
-  CheckCircle,
-  Truck,
-  Eye,
-  AlertTriangle,
-  Download
+  BookOpen, Search, Filter, FileSpreadsheet, Calendar, User,
+  ExternalLink, Tag, CheckCircle, Truck, Eye, AlertTriangle,
+  Download, ArrowRight, Coins, RefreshCw, Layers, ClipboardList,
+  AlertCircle, X
 } from 'lucide-react';
-import { Purchase, Provider, Role } from '../types';
+import { Purchase, Provider, Product, Unit, Category } from '../types';
+
+// Fallback backing models in case parent props has missing indices
+import { 
+  mockProducts, 
+  mockUnits, 
+  mockCategories 
+} from '../data/mockData';
+
+// Subcomponents modular layout
+import PurchaseFilters from './purchase-book/PurchaseFilters';
+import PurchaseSummaryTab from './purchase-book/PurchaseSummaryTab';
+import PurchaseProductTab from './purchase-book/PurchaseProductTab';
+import PurchaseProviderTab from './purchase-book/PurchaseProviderTab';
+import PurchaseCompareTab from './purchase-book/PurchaseCompareTab';
+import PurchaseTrendsTab from './purchase-book/PurchaseTrendsTab';
+import PurchaseAlertsTab from './purchase-book/PurchaseAlertsTab';
+import PurchaseExportTab from './purchase-book/PurchaseExportTab';
 
 interface PurchaseBookProps {
   purchases: Purchase[];
   providers: Provider[];
+  products?: Product[];
+  units?: Unit[];
+  categories?: Category[];
   onViewPurchase: (purchaseId: string) => void;
 }
+
+type TabType =
+  | 'facturas'
+  | 'resumen'
+  | 'por_producto'
+  | 'por_proveedor'
+  | 'comparar_proveedores'
+  | 'tendencia_precios'
+  | 'alertas'
+  | 'exportar';
 
 export default function PurchaseBookView({
   purchases,
   providers,
+  products = mockProducts,
+  units = mockUnits,
+  categories = mockCategories,
   onViewPurchase
 }: PurchaseBookProps) {
-  // Filters states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterProviderId, setFilterProviderId] = useState('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'Pendiente' | 'Recibida' | 'Anulada' | 'Observada'>('all');
-  const [filterPayment, setFilterPayment] = useState('all');
+
+  // Current tab state
+  const [activeTab, setActiveTab] = useState<TabType>('facturas');
+
+  // Selected Detailed Invoice Drawer state
+  const [detailedInvoiceId, setDetailedInvoiceId] = useState<string | null>(null);
+
+  // Global filters states
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('2026-06'); // preloaded to June 2026 to showcase the pollo pechuga scenario
+  const [selectedProductId, setSelectedProductId] = useState('all');
+  const [selectedCategoryId, setSelectedCategoryId] = useState('all');
+  const [selectedProviderId, setSelectedProviderId] = useState('all');
+  const [selectedUnitId, setSelectedUnitId] = useState('all');
+  const [selectedSede, setSelectedSede] = useState('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPayment, setFilterPayment] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Filtering logic
-  const filteredBook = purchases.filter(p => {
-    const matchesSearch = p.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          p.providerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          p.code.toLowerCase().includes(searchQuery.toLowerCase());
+  // Collect available unique months from raw purchases for preloading
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    purchases.forEach(p => {
+      if (p.invoiceDate && p.invoiceDate.length >= 7) {
+        monthsSet.add(p.invoiceDate.substring(0, 7)); // YYYY-MM
+      }
+    });
+    return Array.from(monthsSet).sort().reverse();
+  }, [purchases]);
 
-    const matchesProvider = filterProviderId === 'all' || p.providerId === filterProviderId;
-    const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
-    const matchesPayment = filterPayment === 'all' || p.paymentMethod === filterPayment;
+  // Compute the main dynamically filtered dataset
+  const filteredPurchases = useMemo(() => {
+    return purchases.filter(p => {
+      // 1. Search Query on code, supplier, or invoice
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matches = p.invoiceNumber.toLowerCase().includes(query) ||
+                        p.providerName.toLowerCase().includes(query) ||
+                        p.code.toLowerCase().includes(query);
+        if (!matches) return false;
+      }
 
-    let matchesDates = true;
-    if (startDate) {
-      matchesDates = matchesDates && new Date(p.invoiceDate) >= new Date(startDate);
-    }
-    if (endDate) {
-      matchesDates = matchesDates && new Date(p.invoiceDate) <= new Date(endDate);
-    }
+      // 2. Date Range boundaries
+      if (startDate && p.invoiceDate < startDate) return false;
+      if (endDate && p.invoiceDate > endDate) return false;
 
-    return matchesSearch && matchesProvider && matchesStatus && matchesPayment && matchesDates;
-  });
+      // 3. Month selection
+      if (selectedMonth && selectedMonth !== 'all') {
+        if (!p.invoiceDate.startsWith(selectedMonth)) return false;
+      }
 
-  // Export filtered list to CSV (Real download!)
-  const handleExportCSV = () => {
-    if (filteredBook.length === 0) {
-      alert('No hay información correspondiente para exportar.');
-      return;
-    }
+      // 4. Provider ID
+      if (selectedProviderId && selectedProviderId !== 'all') {
+        if (p.providerId !== selectedProviderId) return false;
+      }
 
-    // CSV Headers
-    const headers = [
-      'Código Compra',
-      'Proveedor',
-      'Factura N°',
-      'Fecha Factura',
-      'Subtotal (DOP)',
-      'Tasa IVA',
-      'Monto IVA',
-      'Total Facturado',
-      'Forma de Pago',
-      'Registrado Por',
-      'Estatus',
-      'Observaciones'
-    ];
+      // 5. Status
+      if (filterStatus && filterStatus !== 'all') {
+        if (p.status !== filterStatus) return false;
+      }
 
-    // CSV Rows mapping
-    const rows = filteredBook.map(p => [
-      p.code,
-      `"${p.providerName.replace(/"/g, '""')}"`,
-      p.invoiceNumber,
-      p.invoiceDate,
-      p.subtotal,
-      '16%',
-      p.tax,
-      p.total,
-      p.paymentMethod,
-      p.creatorName,
-      p.status,
-      `"${(p.notes || '').replace(/"/g, '""')}"`
-    ]);
+      // 6. Payment Method matches
+      if (filterPayment && filterPayment !== 'all') {
+        if (p.paymentMethod !== filterPayment) return false;
+      }
 
-    // Build entire CSV string
-    const csvContent =
-      '\uFEFF' + // UTF-8 byte order mark to ensure Excel reads Spanish characters nicely (acentos, rfc, etc)
-      [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      // 7. Product ID nested loop check
+      if (selectedProductId && selectedProductId !== 'all') {
+        const hasProd = p.items.some(it => it.productId === selectedProductId);
+        if (!hasProd) return false;
+      }
 
-    // Create a temporary link and click it to download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Libro_de_Compras_Celler_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+      // 8. Category ID resolution
+      if (selectedCategoryId && selectedCategoryId !== 'all') {
+        const hasCat = p.items.some(it => {
+          const pr = products.find(prod => prod.id === it.productId);
+          return pr && pr.categoryId === selectedCategoryId;
+        });
+        if (!hasCat) return false;
+      }
+
+      // 9. Unit ID resolution
+      if (selectedUnitId && selectedUnitId !== 'all') {
+        const hasUnit = p.items.some(it => {
+          const pr = products.find(prod => prod.id === it.productId);
+          return pr && pr.unitId === selectedUnitId;
+        });
+        if (!hasUnit) return false;
+      }
+
+      // 10. Sede resolution (Using code indices checksum to simulate diverse stores mapping)
+      if (selectedSede && selectedSede !== 'all') {
+        const assignedSede = p.id.charCodeAt(0) % 3 === 0 ? "Sede Principal" : p.id.charCodeAt(0) % 3 === 1 ? "Sede Norte" : "Sede Sur";
+        if (assignedSede !== selectedSede) return false;
+      }
+
+      return true;
+    });
+  }, [
+    purchases, searchQuery, startDate, endDate, selectedMonth,
+    selectedProviderId, filterStatus, filterPayment, selectedProductId,
+    selectedCategoryId, selectedUnitId, selectedSede, products
+  ]);
+
+  // Active details computed
+  const detailedInvoice = useMemo(() => {
+    return purchases.find(p => p.id === detailedInvoiceId);
+  }, [purchases, detailedInvoiceId]);
 
   return (
-    <div className="space-y-6" id="purchase-book-view">
-      {/* Title header */}
+    <div className="space-y-6" id="compras-libro-principal">
+      {/* Title block */}
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-5 gap-3">
         <div>
-          <h2 className="text-3xl font-display font-extrabold text-slate-800 tracking-tight leading-none">
-            Libro de Compras Oficial
+          <h2 className="text-3xl font-display font-black text-slate-800 tracking-tight leading-none">
+            Libro de Compras & Analítica
           </h2>
           <p className="text-sm text-slate-500 mt-2 font-sans font-medium">
-            Registro diario auxiliar del Celler. Auditorías impositivas de IVA, retenciones, cuentas por pagar y archivos adjuntos.
+            Registro diario auxiliar del Celler. Auditorías impositivas de IVA, arbitraje de precios por proveedor y control preventivo.
           </p>
         </div>
 
-        {/* CSV Export Button */}
-        <button
-          onClick={handleExportCSV}
-          className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-sans font-bold transition shadow-sm"
-          id="btn-export-purchase-book-csv"
-        >
-          <Download className="w-4.5 h-4.5" />
-          Exportar Libro (CSV)
-        </button>
-      </div>
-
-      {/* Multipurpose Filters Card */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-        <h4 className="font-sans font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center gap-2">
-          <Filter className="w-4 h-4 text-emerald-600" />
-          Filtros de Auditoría Impositiva
-        </h4>
-
-        {/* Filters inputs query row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3.5 text-xs font-sans">
-          {/* Search box query */}
-          <div className="lg:col-span-2 relative">
-            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Buscar factura o proveedor</span>
-            <input
-              type="text"
-              placeholder="Buscar folio, RFC o razón social..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-3 py-2 outline-none focus:bg-white focus:border-emerald-650 transition"
-              id="input-book-search"
-            />
-          </div>
-
-          {/* Supplier selector */}
-          <div>
-            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 font-sans">Proveedor</span>
-            <select
-              value={filterProviderId}
-              onChange={(e) => setFilterProviderId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none"
-              id="select-book-provider"
-            >
-              <option value="all">Todos</option>
-              {providers.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status selector */}
-          <div>
-            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 font-sans">Estado de compra</span>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none"
-              id="select-book-status"
-            >
-              <option value="all">Todos</option>
-              <option value="Recibida">Recibida (Sincronizado)</option>
-              <option value="Pendiente">Pendiente de recibir</option>
-              <option value="Observada">Observada (Conflicto)</option>
-              <option value="Anulada">Anulada</option>
-            </select>
-          </div>
-
-          {/* Date from */}
-          <div>
-            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 font-sans">Desde fecha</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 outline-none font-mono"
-            />
-          </div>
-
-          {/* Date to */}
-          <div>
-            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 font-sans">Hasta fecha</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 outline-none font-mono"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Ledger general table view list */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center text-xs text-slate-550 font-sans">
-          <span>Mostrando <strong className="text-slate-800">{filteredBook.length} de {purchases.length}</strong> compras registradas en el Libro Central.</span>
-          <span className="text-[10px] text-slate-400 font-mono">* Sincronización automática de remisiones</span>
-        </div>
-
-        {/* Desktop Ledger Table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-55 text-slate-400 font-bold uppercase tracking-wider">
-                <th className="p-4">Folio Sistema</th>
-                <th className="p-4">Factura N°</th>
-                <th className="p-4">Fecha Factura</th>
-                <th className="p-4">Proveedor / RFC</th>
-                <th className="p-4">Método Pago</th>
-                <th className="p-4 text-right">Subtotal Neto</th>
-                <th className="p-4 text-right font-semibold text-slate-600">Impuestos (IVA)</th>
-                <th className="p-4 text-right">Total Facturado</th>
-                <th className="p-4 text-center">Factura Adjunta</th>
-                <th className="p-4">Estado</th>
-                <th className="p-4 text-right">Detalle</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-sans" id="purchase-book-table-body">
-              {filteredBook.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="text-center py-12 text-slate-400 font-medium">
-                    No se encontraron registros que cumplan con los filtros de búsqueda...
-                  </td>
-                </tr>
-              ) : (
-                filteredBook.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/50 transition">
-                    {/* System code */}
-                    <td className="p-4 font-mono font-bold text-slate-700">{p.code}</td>
-
-                    {/* Invoice bill no */}
-                    <td className="p-4 font-mono font-bold text-slate-800">{p.invoiceNumber}</td>
-
-                    {/* Invoice Date */}
-                    <td className="p-4 text-slate-650 font-medium">{p.invoiceDate}</td>
-
-                    {/* Provider name */}
-                    <td className="p-4">
-                      <p className="font-bold text-slate-755 truncate max-w-[170px]">{p.providerName}</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">Asociado Celler</p>
-                    </td>
-
-                    {/* Payment strategy */}
-                    <td className="p-4 text-slate-500 font-medium">{p.paymentMethod}</td>
-
-                    {/* Subtotal */}
-                    <td className="p-4 text-right font-mono font-medium text-slate-650">RD${p.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-
-                    {/* Taxes */}
-                    <td className="p-4 text-right font-mono text-slate-500 font-semibold">RD${p.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-
-                    {/* Final Net bill */}
-                    <td className="p-4 text-right font-mono font-extrabold text-slate-800">RD${p.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-
-                    {/* Evidence preview indicator */}
-                    <td className="p-4 text-center">
-                      {p.invoiceFileUrl ? (
-                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-100">
-                          ✔ SÍ
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-100">
-                          ✍ PENDIENTE
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Status Badge */}
-                    <td className="p-4">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                        p.status === 'Recibida'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                          : p.status === 'Pendiente'
-                          ? 'bg-amber-50 text-amber-700 border-amber-100'
-                          : 'bg-red-50 text-red-700 border-red-100'
-                      }`}>
-                        {p.status}
-                      </span>
-                    </td>
-
-                    {/* Trigger detail on main module */}
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => onViewPurchase(p.id)}
-                        className="p-1 px-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-650 font-bold rounded-lg transition"
-                        title="Ir a gestionar compra"
-                      >
-                        Ver
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile responsive cards list representation */}
-        <div className="md:hidden divide-y divide-slate-100 text-xs" id="mobile-purchase-book-list">
-          {filteredBook.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 font-medium">
-              No se encontraron registros que cumplan con los filtros de búsqueda...
-            </div>
-          ) : (
-            filteredBook.map((p) => (
-              <div key={p.id} className="p-4 space-y-3 bg-white">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <strong className="text-slate-800 text-sm font-mono">{p.code}</strong>
-                    <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
-                      Facturado: {p.invoiceDate}
-                    </span>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${
-                    p.status === 'Recibida'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                      : p.status === 'Pendiente'
-                      ? 'bg-amber-50 text-amber-700 border-amber-100'
-                      : 'bg-red-50 text-red-700 border-red-100'
-                  }`}>
-                    {p.status}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-slate-650 font-sans leading-relaxed">
-                  <div>
-                    <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Proveedor</span>
-                    <span className="font-bold text-slate-705 truncate max-w-[130px] block">{p.providerName}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[9px] text-slate-400 uppercase block font-extrabold mb-0.5">Total Factura</span>
-                    <strong className="font-mono text-slate-850 text-xs">RD${p.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] bg-slate-5/50 p-2.5 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-slate-400 uppercase text-[8px] block font-bold">Num. Factura</span>
-                    <span className="font-mono text-slate-700 font-bold">{p.invoiceNumber}</span>
-                  </div>
-                  <div className="text-right">
-                    {p.invoiceFileUrl ? (
-                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-750 px-2 py-0.5 rounded text-[8px] font-bold border border-emerald-100">
-                        ✔ ADJUNTADO
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[8px] font-bold border border-amber-100">
-                        ✍ EN ESPERA
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-dashed border-slate-100">
-                  <button
-                    onClick={() => onViewPurchase(p.id)}
-                    className="w-full py-2.5 bg-orange-55 border border-orange-200/80 hover:bg-orange-100 text-orange-700 font-sans font-bold rounded-xl transition text-center text-xs flex items-center justify-center gap-1"
-                  >
-                    Ver Libro de Cuentas &rarr;
-                  </button>
-                </div>
-              </div>
-            ))
+        <div className="flex items-center gap-2">
+          {filteredPurchases.filter(p => p.status === 'Pendiente').length > 0 && (
+            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider motion-safe:animate-pulse">
+              <AlertTriangle className="w-3 h-3 text-amber-800" />
+              Facturas sin revisar
+            </span>
           )}
         </div>
       </div>
+
+      {/* Modern Filter Subcomponent */}
+      <PurchaseFilters
+        providers={providers}
+        products={products}
+        units={units}
+        categories={categories}
+        availableMonths={availableMonths}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        selectedProductId={selectedProductId}
+        setSelectedProductId={setSelectedProductId}
+        selectedCategoryId={selectedCategoryId}
+        setSelectedCategoryId={setSelectedCategoryId}
+        selectedProviderId={selectedProviderId}
+        setSelectedProviderId={setSelectedProviderId}
+        selectedUnitId={selectedUnitId}
+        setSelectedUnitId={setSelectedUnitId}
+        selectedSede={selectedSede}
+        setSelectedSede={setSelectedSede}
+        filterStatus={filterStatus}
+        setFilterStatus={setFilterStatus}
+        filterPayment={filterPayment}
+        setFilterPayment={setFilterPayment}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+      />
+
+      {/* Internal Sub Navigation Tabs */}
+      <div className="border-b border-slate-200" id="libro-compras-sub-tabs">
+        <nav className="flex flex-wrap -mb-px gap-1 md:gap-2">
+          {[
+            { id: 'facturas', label: 'FACTURAS', icon: ClipboardList },
+            { id: 'resumen', label: 'RESUMEN', icon: FileSpreadsheet },
+            { id: 'por_producto', label: 'POR PRODUCTO', icon: Tag },
+            { id: 'por_proveedor', label: 'POR PROVEEDOR', icon: Truck },
+            { id: 'comparar_proveedores', label: 'COMPARA PROVEEDORES', icon: Coins },
+            { id: 'tendencia_precios', label: 'TENDENCIA DE PRECIOS', icon: RefreshCw },
+            { id: 'alertas', label: 'ALERTAS', icon: AlertTriangle },
+            { id: 'exportar', label: 'EXPORTAR', icon: Download }
+          ].map((tab) => {
+            const isSel = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id as TabType);
+                  setDetailedInvoiceId(null); // Clear selected drawer on switch
+                }}
+                className={`py-3 px-4 text-[10.5px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 border-b-2 transition duration-150 font-sans outline-none ${
+                  isSel
+                    ? 'border-emerald-600 text-emerald-705 font-black bg-slate-50'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <Icon className={`w-4 h-4 shrink-0 ${isSel ? 'text-emerald-600 animate-pulse' : 'text-slate-400'}`} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Master Main Body Container Switching Tabs */}
+      <div className="py-2" id="libro-tab-viewport">
+        
+        {/* ACTIVE TAB: FACTURAS (Table registry list) */}
+        {activeTab === 'facturas' && (
+          <div className="space-y-4" id="facturas-tabular-and-drawer">
+            {/* Table box card header */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 font-sans gap-2">
+                <span>
+                  Resultados del periodo: Mostrando <strong className="text-slate-755">{filteredPurchases.length} de {purchases.length}</strong> compras conciliadas.
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">* Sincronización automática de remisiones</span>
+              </div>
+
+              {/* Invoices Desktop Table layout */}
+              <div className="hidden md:block overflow-x-auto text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-105 bg-slate-50/30 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="p-4">Folio ID</th>
+                      <th className="p-4">Factura N°</th>
+                      <th className="p-4">Fecha Emisión</th>
+                      <th className="p-4">Proveedor / RFC</th>
+                      <th className="p-4">Forma Pago</th>
+                      <th className="p-4 text-right">Subtotal</th>
+                      <th className="p-4 text-right">IVA Tax</th>
+                      <th className="p-4 text-right">Monto Total</th>
+                      <th className="p-4 text-center">Adjunto</th>
+                      <th className="p-4">Estado</th>
+                      <th className="p-4 text-right">Operaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-sans">
+                    {filteredPurchases.length === 0 ? (
+                      <tr>
+                        <td colSpan={11} className="p-12 text-center text-slate-400 font-medium font-sans">
+                          No se encontraron facturas o comprobantes de gasto con los criterios de filtrado seleccionados.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredPurchases.map((p) => {
+                        const isDetailed = detailedInvoiceId === p.id;
+                        return (
+                          <tr key={p.id} className={`hover:bg-slate-50/50 transition duration-150 ${isDetailed ? 'bg-emerald-50/10' : ''}`}>
+                            <td className="p-4 font-mono font-bold text-slate-600">{p.code}</td>
+                            <td className="p-4 font-mono font-extrabold text-slate-800">{p.invoiceNumber}</td>
+                            <td className="p-4 text-slate-600 font-medium">{p.invoiceDate}</td>
+                            <td className="p-4">
+                              <p className="font-bold text-slate-700 truncate max-w-[160px]">{p.providerName}</p>
+                              <span className="text-[9px] text-slate-400 font-mono block">RFC: {p.id.split('-').reverse()[0]}</span>
+                            </td>
+                            <td className="p-4 font-medium text-slate-500">{p.paymentMethod}</td>
+                            <td className="p-4 text-right font-mono text-slate-600">RD$ {p.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 1 })}</td>
+                            <td className="p-4 text-right font-mono text-slate-400">RD$ {p.tax.toLocaleString('es-DO', { minimumFractionDigits: 1 })}</td>
+                            <td className="p-4 text-right font-mono font-extrabold text-slate-900">RD$ {p.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-4 text-center">
+                              {p.invoiceFileUrl ? (
+                                <span className="bg-blue-50 text-blue-700 text-[8.5px] px-1.5 py-0.5 rounded border border-blue-100 font-black">✔ PDF</span>
+                              ) : (
+                                <span className="bg-amber-50 text-amber-700 text-[8.5px] px-1.5 py-0.5 rounded border border-amber-100 font-black">PEND</span>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase border ${
+                                p.status === 'Recibida'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                  : p.status === 'Pendiente'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                  : 'bg-rose-50 text-rose-700 border-rose-100'
+                              }`}>
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => {
+                                  setDetailedInvoiceId(isDetailed ? null : p.id);
+                                }}
+                                className="p-1.5 px-3 bg-slate-100 hover:bg-slate-205 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold rounded-lg transition text-[11px]"
+                              >
+                                {isDetailed ? 'Cerrar' : 'Ver Detalle'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile details lists cards layout */}
+              <div className="md:hidden divide-y divide-slate-100 text-xs">
+                {filteredPurchases.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 font-medium">
+                    No se encontraron facturas o comprobantes de gasto con los criterios activos.
+                  </div>
+                ) : (
+                  filteredPurchases.map((p) => {
+                    const isDetailed = detailedInvoiceId === p.id;
+                    return (
+                      <div key={p.id} className="p-4 space-y-3 bg-white">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <strong className="text-slate-800 text-sm font-mono">{p.code}</strong>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">Fecha: {p.invoiceDate}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${
+                            p.status === 'Recibida'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                              : p.status === 'Pendiente'
+                              ? 'bg-amber-50 text-amber-700 border-amber-100'
+                              : 'bg-rose-50 text-rose-700 border-rose-100'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1 text-[11px] leading-relaxed">
+                          <div>
+                            <span className="text-slate-400 text-[8.5px] uppercase block font-bold">Proveedor</span>
+                            <span className="font-bold text-slate-700">{p.providerName}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-slate-400 text-[8.5px] uppercase block font-bold">Total DOP</span>
+                            <strong className="font-mono text-slate-900 text-sm">RD$ {p.total.toLocaleString()}</strong>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[10px]">
+                          <span>Metodo: <strong className="font-semibold text-slate-700">{p.paymentMethod}</strong></span>
+                          <span>Folio: <strong className="font-semibold font-mono text-slate-700">{p.invoiceNumber}</strong></span>
+                        </div>
+
+                        <button
+                          onClick={() => setDetailedInvoiceId(isDetailed ? null : p.id)}
+                          className="w-full bg-slate-900 text-white font-bold text-center py-2.5 rounded-lg border border-slate-800 transition"
+                        >
+                          {isDetailed ? 'Cerrar Despeje de Renglones' : 'Desglosar Recibo de Compra'}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* FLYOUT DRAWER: Dynamic Inline Items Table visualization when click Detailed Invoice */}
+            {detailedInvoice && (
+              <div className="bg-slate-900 text-white rounded-2xl p-5 border border-slate-840 shadow-lg space-y-4 animate-fade-in" id="invoice-details-drawer">
+                <div className="flex justify-between items-start border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-emerald-600 rounded-lg shrink-0">
+                      <ClipboardList className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black uppercase tracking-wide">Desglose Físico de Compra ({detailedInvoice.code})</h4>
+                      <p className="text-[10px] text-slate-400">
+                        Cotejo del Folio Fiscal {detailedInvoice.invoiceNumber} • Emitido el {detailedInvoice.invoiceDate} por {detailedInvoice.providerName}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setDetailedInvoiceId(null)}
+                    className="p-1 hover:bg-white/10 rounded-full transition text-slate-400 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Sub items matching */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-white/10 text-slate-400 font-bold uppercase text-[9.5px]">
+                        <th className="p-3">Insumo / Renglón Registrado</th>
+                        <th className="p-3 text-right">Cantidad de Carga (Vol)</th>
+                        <th className="p-3 text-right">Precio Unitario Convenido</th>
+                        <th className="p-3 text-right font-bold text-emerald-400">Total Renglón (DOP)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {detailedInvoice.items && detailedInvoice.items.length > 0 ? (
+                        detailedInvoice.items.map((it: any, idx: number) => {
+                          const pObj = products.find(prod => prod.id === it.productId);
+                          const pName = pObj ? pObj.name : 'Insumo Adicionado';
+                          const uSuffix = pObj ? (units.find(u => u.id === pObj.unitId)?.code || 'u') : 'u';
+                          
+                          return (
+                            <tr key={idx} className="hover:bg-white/5 transition">
+                              <td className="p-3 font-bold text-slate-100">{pName}</td>
+                              <td className="p-3 text-right font-mono font-semibold text-slate-300">{it.qty.toLocaleString()} {uSuffix}</td>
+                              <td className="p-3 text-right font-mono text-slate-300">RD$ {it.unitPrice.toLocaleString('es-DO', { minimumFractionDigits: 1 })}</td>
+                              <td className="p-3 text-right font-mono font-black text-emerald-400">RD$ {it.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="p-6 text-center text-slate-450 italic">Esta factura posee un cargo global pre-aprobado sin desglosar renglones sueltos.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals Breakdown banner inside drawer */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/5 p-4 rounded-xl border border-white/10 gap-3 text-xs">
+                  <div className="space-y-1">
+                    <span className="text-slate-400 text-[9px] uppercase font-bold block">Consignado de Firma</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 bg-emerald-600 text-white flex items-center justify-center rounded-full text-[9px] font-bold">
+                        {detailedInvoice.creatorName.charAt(0)}
+                      </div>
+                      <span className="text-slate-200">Revisado y validado en sistema por: <strong className="font-extrabold text-white">{detailedInvoice.creatorName}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="text-right space-y-1 font-mono sm:border-l sm:border-white/10 sm:pl-5">
+                    <div className="text-[10px] text-slate-400">Subtotal: RD$ {detailedInvoice.subtotal.toLocaleString()}</div>
+                    <div className="text-[10px] text-slate-400">ITBIS (16%): RD$ {detailedInvoice.tax.toLocaleString()}</div>
+                    <div className="text-sm font-black text-emerald-400">TOTAL NETO: RD$ {detailedInvoice.total.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {/* Trigger manager function block */}
+                <div className="pt-2 flex justify-end gap-2.5">
+                  <button
+                    onClick={() => onViewPurchase(detailedInvoice.id)}
+                    className="bg-white hover:bg-slate-200 text-slate-900 font-extrabold text-xs px-4 py-2 rounded-lg transition"
+                  >
+                    Editar y Modificar Factura en Libro Diario &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ACTIVE TAB: RESUMEN (Dashboard indicators) */}
+        {activeTab === 'resumen' && (
+          <PurchaseSummaryTab
+            filteredPurchases={filteredPurchases}
+            purchases={purchases}
+            providers={providers}
+            products={products}
+            categories={categories}
+            selectedMonth={selectedMonth}
+          />
+        )}
+
+        {/* ACTIVE TAB: POR PRODUCTO (Product analysis) */}
+        {activeTab === 'por_producto' && (
+          <PurchaseProductTab
+            purchases={purchases}
+            filteredPurchases={filteredPurchases}
+            providers={providers}
+            products={products}
+            units={units}
+          />
+        )}
+
+        {/* ACTIVE TAB: POR PROVEEDOR (Provider analysis) */}
+        {activeTab === 'por_proveedor' && (
+          <PurchaseProviderTab
+            purchases={purchases}
+            filteredPurchases={filteredPurchases}
+            providers={providers}
+            products={products}
+            units={units}
+          />
+        )}
+
+        {/* ACTIVE TAB: COMPARAR PROVEEDORES (Arbitrage sheet) */}
+        {activeTab === 'comparar_proveedores' && (
+          <PurchaseCompareTab
+            purchases={purchases}
+            providers={providers}
+            products={products}
+            units={units}
+            selectedMonth={selectedMonth}
+          />
+        )}
+
+        {/* ACTIVE TAB: TENDENCIA DE PRECIOS (Inflation index) */}
+        {activeTab === 'tendencia_precios' && (
+          <PurchaseTrendsTab
+            purchases={purchases}
+            providers={providers}
+            products={products}
+            units={units}
+          />
+        )}
+
+        {/* ACTIVE TAB: ALERTAS (Warnings and logs) */}
+        {activeTab === 'alertas' && (
+          <PurchaseAlertsTab
+            purchases={purchases}
+            filteredPurchases={filteredPurchases}
+            providers={providers}
+            products={products}
+            units={units}
+            selectedMonth={selectedMonth}
+          />
+        )}
+
+        {/* ACTIVE TAB: EXPORTAR (Download options) */}
+        {activeTab === 'exportar' && (
+          <PurchaseExportTab
+            purchases={purchases}
+            filteredPurchases={filteredPurchases}
+            providers={providers}
+            products={products}
+            units={units}
+            selectedMonth={selectedMonth}
+          />
+        )}
+
+      </div>
+
     </div>
   );
 }
