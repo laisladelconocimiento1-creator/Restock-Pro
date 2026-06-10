@@ -1274,28 +1274,30 @@ export default function ReportsView({
       )}
 
       {/* THREE ACTION STAGE TABS SELECTOR */}
-      <div className="flex border-b border-slate-200 bg-white p-1 rounded-xl shadow-sm gap-2">
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold transition text-xs ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <Sparkles className="w-4 h-4" />
-          Dashboard Gerencial
-        </button>
-        <button
-          onClick={() => setActiveTab('assistant')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold transition text-xs ${activeTab === 'assistant' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <HelpCircle className="w-4 h-4" />
-          Asistente de Auditoría (18 Respuestas)
-        </button>
-        <button
-          onClick={() => setActiveTab('reports')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold transition text-xs ${activeTab === 'reports' ? 'bg-slate-905 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <Layers className="w-4 h-4" />
-          9 Familias de Reportes
-        </button>
+      <div className="w-full overflow-x-auto scrollbar-none border-b border-slate-200 bg-white p-1 rounded-xl shadow-sm" id="reports-view-tabs-container">
+        <div className="flex min-w-max gap-2" id="reports-view-tabs">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold transition text-xs ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Sparkles className="w-4 h-4" />
+            Dashboard Gerencial
+          </button>
+          <button
+            onClick={() => setActiveTab('assistant')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold transition text-xs ${activeTab === 'assistant' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <HelpCircle className="w-4 h-4" />
+            Asistente de Auditoría (18 Respuestas)
+          </button>
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold transition text-xs ${activeTab === 'reports' ? 'bg-slate-905 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Layers className="w-4 h-4" />
+            9 Familias de Reportes
+          </button>
+        </div>
       </div>
 
       {/* TAB CONTENTS */}

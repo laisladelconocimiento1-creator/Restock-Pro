@@ -36,7 +36,9 @@ body {
 }
 
 html,
-body {
+body,
+#root,
+#main-app-container {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
@@ -46,11 +48,14 @@ body {
   box-sizing: border-box;
 }
 
-img,
-table,
-div,
+main,
 section,
-main {
+div,
+article,
+header,
+footer,
+img,
+table {
   max-width: 100%;
 }
 

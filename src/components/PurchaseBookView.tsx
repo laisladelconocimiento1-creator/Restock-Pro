@@ -216,8 +216,8 @@ export default function PurchaseBookView({
       />
 
       {/* Internal Sub Navigation Tabs */}
-      <div className="border-b border-slate-200" id="libro-compras-sub-tabs">
-        <nav className="flex flex-wrap -mb-px gap-1 md:gap-2">
+      <div className="w-full overflow-x-auto scrollbar-none border-b border-slate-200" id="libro-compras-sub-tabs">
+        <nav className="flex min-w-max -mb-px gap-1 md:gap-2">
           {[
             { id: 'facturas', label: 'FACTURAS', icon: ClipboardList },
             { id: 'resumen', label: 'RESUMEN', icon: FileSpreadsheet },

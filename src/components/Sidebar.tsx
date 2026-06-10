@@ -287,9 +287,9 @@ export default function Sidebar({
       </div>
 
       {/* Desktop Persistent Sidebar */}
-      <div className="hidden md:block w-64 h-screen sticky top-0 overflow-hidden flex-shrink-0">
+      <aside className="hidden md:block w-64 h-screen fixed top-0 bottom-0 left-0 bg-slate-900 border-r border-slate-800 z-30 overflow-hidden">
         <SidebarContent />
-      </div>
+      </aside>
     </>
   );
 }

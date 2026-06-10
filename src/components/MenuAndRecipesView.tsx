@@ -1118,50 +1118,52 @@ export default function MenuAndRecipesView({
       </div>
 
       {/* Module Hub Navigation Tabs */}
-      <div className="flex border-b border-slate-200" id="menu-recipe-tabs">
-        <button
-          onClick={() => { setActiveTab('items'); setSelectedItemForRecipe(null); }}
-          className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
-            activeTab === 'items' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
-          }`}
-          id="tab-plating-recipes"
-        >
-          🍴 Platos y Fichas Técnicas
-          <span className="px-1.5 py-0.2 text-[10px] bg-slate-100 rounded text-slate-500 font-sans">{menuItems.length}</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('combos'); setSelectedItemForRecipe(null); }}
-          className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
-            activeTab === 'combos' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
-          }`}
-          id="tab-combos-pack"
-        >
-          📦 Combos de Menú
-          <span className="px-1.5 py-0.2 text-[10px] bg-slate-100 rounded text-slate-500 font-sans">{combos.length}</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('sales'); setSelectedItemForRecipe(null); }}
-          className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
-            activeTab === 'sales' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
-          }`}
-          id="tab-sales-connector"
-        >
-          ⚙️ Importador de Ventas
-        </button>
-        <button
-          onClick={() => { setActiveTab('mapping'); setSelectedItemForRecipe(null); }}
-          className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
-            activeTab === 'mapping' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
-          }`}
-          id="tab-mapping-aliases"
-        >
-          🔗 Equivalencias POS
-          {unmatchedItems.length > 0 && (
-            <span className="px-1.5 py-0.2 text-[10px] bg-red-100 text-red-650 rounded font-bold animate-pulse">
-              {unmatchedItems.length}
-            </span>
-          )}
-        </button>
+      <div className="w-full overflow-x-auto scrollbar-none border-b border-slate-200" id="menu-recipe-tabs-container">
+        <div className="flex min-w-max" id="menu-recipe-tabs">
+          <button
+            onClick={() => { setActiveTab('items'); setSelectedItemForRecipe(null); }}
+            className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
+              activeTab === 'items' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
+            }`}
+            id="tab-plating-recipes"
+          >
+            🍴 Platos y Fichas Técnicas
+            <span className="px-1.5 py-0.2 text-[10px] bg-slate-100 rounded text-slate-500 font-sans">{menuItems.length}</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('combos'); setSelectedItemForRecipe(null); }}
+            className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
+              activeTab === 'combos' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
+            }`}
+            id="tab-combos-pack"
+          >
+            📦 Combos de Menú
+            <span className="px-1.5 py-0.2 text-[10px] bg-slate-100 rounded text-slate-500 font-sans">{combos.length}</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('sales'); setSelectedItemForRecipe(null); }}
+            className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
+              activeTab === 'sales' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
+            }`}
+            id="tab-sales-connector"
+          >
+            ⚙️ Importador de Ventas
+          </button>
+          <button
+            onClick={() => { setActiveTab('mapping'); setSelectedItemForRecipe(null); }}
+            className={`py-3 px-6 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
+              activeTab === 'mapping' ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-950'
+            }`}
+            id="tab-mapping-aliases"
+          >
+            🔗 Equivalencias POS
+            {unmatchedItems.length > 0 && (
+              <span className="px-1.5 py-0.2 text-[10px] bg-red-100 text-red-650 rounded font-bold animate-pulse">
+                {unmatchedItems.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* TAB CONTENTS - PLATINGS & RECIPES */}

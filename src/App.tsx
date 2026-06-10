@@ -239,7 +239,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800" id="main-app-container">
+    <div className="min-h-screen w-full bg-slate-50 text-slate-800 flex flex-col md:flex-row overflow-x-hidden" id="main-app-container">
       {/* Sidebar navigation */}
       <Sidebar
         currentUser={currentUser}
@@ -250,8 +250,8 @@ export default function App() {
       />
 
       {/* Primary viewport content frame container */}
-      <main className="flex-1 md:pl-64 pb-16 md:pb-0 min-h-screen relative flex flex-col">
-        <div className="p-4 md:p-8 flex-1 max-w-7xl mx-auto w-full space-y-6">
+      <main className="flex-1 w-full max-w-full overflow-x-hidden pb-24 md:pb-8 md:pl-64 min-h-screen relative flex flex-col">
+        <div className="p-3 md:p-8 flex-1 max-w-7xl mx-auto w-full space-y-6">
 
           {/* Surtido converting notification bar indicator banner */}
           {convertingRequest && activeModule !== 'Compras' && (
