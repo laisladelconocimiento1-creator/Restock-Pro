@@ -239,6 +239,7 @@ export interface RestaurantConfig {
   email: string;
   taxRate: number; // e.g. 16 for 16% IVA
   currencySymbol: string;
+  allowedDomain?: string; // Dominio para la verificación de identidad corporativa con Google Sign-In
 }
 
 // === PORCIONAMIENTO, RENDIMIENTO Y CONTROL CONTRA VENTAS ==

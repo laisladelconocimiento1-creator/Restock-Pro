@@ -35,3 +35,22 @@ body {
   color: #0f172a;
 }
 
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+img,
+table,
+div,
+section,
+main {
+  max-width: 100%;
+}
+

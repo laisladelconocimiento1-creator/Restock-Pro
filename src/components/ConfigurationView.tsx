@@ -19,6 +19,7 @@ export default function ConfigurationView({
   const [address, setAddress] = useState(config.address);
   const [phone, setPhone] = useState(config.phone);
   const [taxRate, setTaxRate] = useState(config.taxRate);
+  const [allowedDomain, setAllowedDomain] = useState(config.allowedDomain || 'cellergourmet.com');
 
   // General alert limits
   const [lowStockAlertLimit, setLowStockAlertLimit] = useState(5);
@@ -40,7 +41,8 @@ export default function ConfigurationView({
       phone,
       email: config.email,
       taxRate,
-      currencySymbol: config.currencySymbol
+      currencySymbol: config.currencySymbol,
+      allowedDomain
     });
 
     alert('Configuraciones operativas guardadas con éxito e impactadas en el Libro de Compras.');
@@ -125,6 +127,21 @@ export default function ConfigurationView({
                 onChange={(e) => setTaxRate(Number(e.target.value))}
                 className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-lg p-2.5 outline-none font-mono text-slate-800 disabled:opacity-60"
               />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-slate-650 font-bold uppercase text-[9px] mb-1">Restricción de Dominio Google Sign-In (Vacío para libre acceso)</label>
+              <input
+                type="text"
+                disabled={!isAdmin}
+                value={allowedDomain}
+                onChange={(e) => setAllowedDomain(e.target.value)}
+                placeholder="Ejemplo: cellergourmet.com"
+                className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-lg p-2.5 outline-none font-mono text-slate-800 disabled:opacity-60"
+              />
+              <p className="text-[10px] text-slate-400 mt-1 block font-medium">
+                Si se especifica, los correos con un dominio de correo diferente recibirán la advertencia "Tu cuenta no tiene acceso" de manera inmediata al iniciar sesión.
+              </p>
             </div>
           </div>
 

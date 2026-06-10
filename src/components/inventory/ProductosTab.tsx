@@ -207,7 +207,8 @@ export default function ProductosTab({
 
       {/* PRODUCTS LEDGER GRID */}
       <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop layout */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider font-mono">
               <tr>
@@ -266,6 +267,64 @@ export default function ProductosTab({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards layout */}
+        <div className="block md:hidden divide-y divide-slate-100 text-xs" id="productos-mobile-cards">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 font-medium">No se encontraron productos.</div>
+          ) : (
+            filtered.map((p) => {
+              const skuVal = (p as any).sku || 'N/A';
+              return (
+                <div key={p.id} className="p-4 bg-white hover:bg-slate-50/50 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-0.5">
+                      <strong className="text-slate-800 text-sm font-semibold">{p.name}</strong>
+                      <span className="block text-[10px] text-slate-400 font-mono">SKU: {skuVal}</span>
+                    </div>
+                    {p.portionsAvailable !== undefined && (
+                      <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 border border-sky-100 rounded text-[8px] font-bold">
+                        PORCIONABLE
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-slate-600 text-xs pt-1">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Categoría</span>
+                      <span className="font-semibold text-slate-850">{getCategoryName(p.categoryId)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Medida / Unidad</span>
+                      <span className="font-mono text-slate-800">{getUnitCode(p.unitId)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Rango de Stock</span>
+                      <span className="text-slate-800 font-semibold">{p.minStock} - {p.maxStock}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Costo Promedio</span>
+                      <span className="font-mono text-slate-900 font-bold">RD${p.averageCost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-dashed border-slate-100">
+                    <span className="text-[10px] text-slate-400 truncate max-w-[150px]">Prov: {getProviderNames(p.providerIds)}</span>
+                    {canEdit && (
+                      <button
+                        onClick={() => handleOpenProductModal(p)}
+                        className="px-3 py-1.5 bg-orange-55 hover:bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-lg text-[10px] flex items-center gap-1"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Editar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

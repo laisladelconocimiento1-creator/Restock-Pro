@@ -799,6 +799,7 @@ export const mockConfig: RestaurantConfig = {
   phone: '809 123 4567',
   email: 'administracion@elcellergourmet.com',
   taxRate: 18, // ITBIS estándar en RD
-  currencySymbol: 'RD$'
+  currencySymbol: 'RD$',
+  allowedDomain: 'cellergourmet.com'
 };
 
