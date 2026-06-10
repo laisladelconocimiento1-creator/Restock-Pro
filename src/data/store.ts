@@ -11,6 +11,7 @@ import {
   RestaurantConfig,
   User,
   Role,
+  UserStatus,
   MovementType,
   InventoryArea,
   PortionRule,
@@ -234,19 +235,161 @@ export function initializeStore(forceReset = false) {
 
 // Main accessors
 export const store = {
+  // Permissions & RBAC Evaluation
+  hasPermission(user: User, permission: string): boolean {
+    const role = user.role;
+    // Admin has absolute control
+    if (role === 'ADMIN') return true;
+    
+    // Check custom special permissions
+    if (user.specialPermissions && user.specialPermissions.includes(permission)) {
+      return true;
+    }
+
+    switch (role) {
+      case 'GERENTE':
+        return [
+          'inventory.view',
+          'purchase.view',
+          'purchase_book.view',
+          'requisition.approve',
+          'inventory.transfer',
+          'inventory.adjust',
+          'inventory.approve_count',
+          'daily_close.view',
+          'daily_close.justify',
+          'daily_close.approve',
+          'reports.view',
+          'audit.view',
+          'users.view'
+        ].includes(permission);
+
+      case 'COMPRAS':
+        return [
+          'inventory.view',
+          'purchase.view',
+          'purchase.create',
+          'purchase.update',
+          'purchase.upload_invoice',
+          'purchase.confirm_ocr',
+          'purchase_book.view',
+          'purchase_book.analytics',
+          'settings.manage',
+          'menu.view'
+        ].includes(permission);
+
+      case 'ALMACEN_RECEPCION':
+      case 'RECEPCIÓN':
+        return [
+          'inventory.view',
+          'inventory.transfer',
+          'purchase.view',
+          'purchase.update',
+          'requisition.deliver',
+          'portioning.view'
+        ].includes(permission);
+
+      case 'CHEF':
+      case 'COCINA':
+        return [
+          'inventory.view',
+          'inventory.count',
+          'inventory.adjust',
+          'requisition.create',
+          'requisition.approve',
+          'portioning.view',
+          'portioning.create',
+          'recipe.view',
+          'recipe.create',
+          'recipe.update',
+          'daily_close.view',
+          'daily_close.create'
+        ].includes(permission);
+
+      case 'COCINERO':
+        return [
+          'inventory.view',
+          'inventory.count',
+          'requisition.create',
+          'portioning.create',
+          'inventory.adjust',
+          'recipe.view'
+        ].includes(permission);
+
+      case 'CONTABILIDAD':
+        return [
+          'purchase_book.view',
+          'purchase_book.export',
+          'purchase.view',
+          'audit.view',
+          'purchase_book.analytics'
+        ].includes(permission);
+
+      case 'AUDITOR':
+        return [
+          'audit.view',
+          'inventory.view',
+          'purchase.view',
+          'purchase_book.view',
+          'requisition.view',
+          'portioning.view',
+          'daily_close.view',
+          'reports.view',
+          'reports.export'
+        ].includes(permission);
+
+      case 'SOLO_LECTURA':
+      case 'LECTURA':
+        return [
+          'inventory.view',
+          'reports.view'
+        ].includes(permission);
+
+      default:
+        return false;
+    }
+  },
+
   // Current user
-  getCurrentUser(): User {
-    return getLocalStorageItem<User>(KEYS.CURRENT_USER, mockUsers[0]);
+  getCurrentUser(): User | null {
+    const raw = localStorage.getItem(KEYS.CURRENT_USER);
+    if (!raw) return null;
+    try {
+      const u = JSON.parse(raw) as User;
+      const list = this.getUsers();
+      // Keep it completely in sync with users database updates (status/role change)
+      const found = list.find(dbu => dbu.id === u.id);
+      if (found) {
+        // If they are no longer active, sign them out safely
+        if (found.status === 'DISABLED' || found.status === 'SUSPENDED' || found.status === 'REJECTED') {
+          localStorage.removeItem(KEYS.CURRENT_USER);
+          return null;
+        }
+        return found;
+      }
+      return u;
+    } catch {
+      return null;
+    }
   },
   setCurrentUser(user: User | null): void {
     if (user === null) {
+      const prev = this.getCurrentUser();
+      if (prev) {
+        this.addAuditLog(
+          'CIERRE_SESIÓN',
+          'Sesión',
+          `Usuario ${prev.name} cerró sesión de forma segura`,
+          prev.id
+        );
+      }
       localStorage.removeItem(KEYS.CURRENT_USER);
     } else {
       setLocalStorageItem(KEYS.CURRENT_USER, user);
       this.addAuditLog(
         'INICIO_SESIÓN',
         'Sesión',
-        `Usuario inició sesión con rol ${user.role}`,
+        `Usuario inició sesión mediante Google Sign-In con rol ${user.role} (Sede: ${user.hq || 'N/A'}, Área: ${user.area || 'N/A'})`,
         user.id
       );
     }
@@ -254,10 +397,130 @@ export const store = {
 
   // Users
   getUsers(): User[] {
-    return getLocalStorageItem<User[]>(KEYS.USERS, mockUsers);
+    const users = getLocalStorageItem<User[]>(KEYS.USERS, mockUsers);
+    return users.map(u => ({
+      ...u,
+      status: u.status || 'ACTIVE',
+      organizationId: u.organizationId || 'Celler Gourmet'
+    }));
   },
   saveUsers(users: User[]): void {
     setLocalStorageItem(KEYS.USERS, users);
+  },
+
+  inviteUser(user: Omit<User, 'id'> & { id?: string }): void {
+    const users = this.getUsers();
+    const newId = user.id || 'usr-' + Math.random().toString(36).substr(2, 9);
+    const newUser: User = {
+      ...user,
+      id: newId,
+      status: 'ACTIVE',
+      avatar: user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
+      organizationId: 'Celler Gourmet'
+    };
+    users.push(newUser);
+    this.saveUsers(users);
+    this.addAuditLog('CREACIÓN_USUARIO', 'Usuarios', `Usuario invitado por administrador: ${newUser.name} (${newUser.email}, Rol: ${newUser.role}, Sede: ${newUser.hq || 'N/A'}, Área: ${newUser.area || 'N/A'})`, newUser.id);
+  },
+
+  requestAccess(name: string, email: string, sub: string, avatarUrl?: string): User {
+    const users = this.getUsers();
+    const existing = users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+    if (existing) {
+      if (!existing.sub) {
+        existing.sub = sub;
+        this.saveUsers(users);
+      }
+      return existing;
+    }
+    const newId = 'usr-' + Math.random().toString(36).substr(2, 9);
+    const newUser: User = {
+      id: newId,
+      name,
+      email,
+      sub,
+      role: 'SOLO_LECTURA',
+      avatar: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
+      status: 'PENDING_APPROVAL',
+      dateOfRequest: new Date().toISOString(),
+      organizationId: 'Celler Gourmet',
+      hq: 'Pendiente',
+      area: 'Pendiente'
+    };
+    users.push(newUser);
+    this.saveUsers(users);
+    this.addAuditLog('CREACIÓN_USUARIO', 'Usuarios', `Nueva solicitud de acceso desde Google: ${name} (${email}, Google sub: ${sub})`, newUser.id);
+    return newUser;
+  },
+
+  approveUserRequest(id: string, role: Role, hq: string, area: string): void {
+    const users = this.getUsers();
+    const list = users.map(u => {
+      if (u.id === id) {
+        this.addAuditLog('APROBACIÓN_USUARIO', 'Usuarios', `Aprobada solicitud de acceso para ${u.name} (${u.email}) con rol ${role} en la Sede ${hq} (Área: ${area})`, u.id);
+        return {
+          ...u,
+          status: 'ACTIVE' as UserStatus,
+          role,
+          hq,
+          area
+        };
+      }
+      return u;
+    });
+    this.saveUsers(list);
+  },
+
+  rejectUserRequest(id: string): void {
+    const users = this.getUsers();
+    const list = users.map(u => {
+      if (u.id === id) {
+        this.addAuditLog('USUARIO_RECHAZADO', 'Usuarios', `Rechazada solicitud de acceso por administrador para ${u.name} (${u.email})`, u.id);
+        return {
+          ...u,
+          status: 'REJECTED' as UserStatus
+        };
+      }
+      return u;
+    });
+    this.saveUsers(list);
+  },
+
+  disableUser(id: string): void {
+    const users = this.getUsers();
+    const list = users.map(u => {
+      if (u.id === id) {
+        this.addAuditLog('USUARIO_DESACTIVADO', 'Usuarios', `Deshabilitado acceso al sistema por administrador para ${u.name} (${u.email})`, u.id);
+        return {
+          ...u,
+          status: 'DISABLED' as UserStatus
+        };
+      }
+      return u;
+    });
+    this.saveUsers(list);
+  },
+
+  updateUserRoleAndPermissions(id: string, role: Role, hq: string, area: string, status: UserStatus, specialPermissions?: string[]): void {
+    const users = this.getUsers();
+    const list = users.map(u => {
+      if (u.id === id) {
+        let comment = `Modificados datos de usuario ${u.name}. `;
+        if (u.role !== role) comment += `Rol cambiado de ${u.role} a ${role}. `;
+        if (u.status !== status) comment += `Estado cambiado de ${u.status} a ${status}. `;
+        this.addAuditLog('CAMBIO_ROL_PERMISO', 'Usuarios', comment, u.id);
+        return {
+          ...u,
+          role,
+          hq,
+          area,
+          status,
+          specialPermissions
+        };
+      }
+      return u;
+    });
+    this.saveUsers(list);
   },
 
   // Categories

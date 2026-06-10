@@ -19,38 +19,111 @@ import {
 export const mockUsers: User[] = [
   {
     id: 'usr-1',
-    name: 'Carlos Mendoza',
-    email: 'carlos.admin@elceller.com',
+    name: 'Diana Alarcón',
+    email: 'diana.alarcon@cellergourmet.com',
     role: 'ADMIN',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Administración',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_diana001'
   },
   {
     id: 'usr-2',
-    name: 'Ana María Gómez',
-    email: 'ana.gerente@elceller.com',
+    name: 'Rodrigo Mendoza',
+    email: 'rodrigo.mendoza@cellergourmet.com',
     role: 'GERENTE',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80'
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Gerencia',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_rodrigo002'
   },
   {
     id: 'usr-3',
-    name: 'Roberto Dávila',
-    email: 'roberto.compras@elceller.com',
+    name: 'Sandra Ortiz',
+    email: 'sandra.ortiz@cellergourmet.com',
     role: 'COMPRAS',
-    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80'
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Compras',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_sandra003'
   },
   {
     id: 'usr-4',
-    name: 'Chef Fabián Ríos',
-    email: 'chef.cocina@elceller.com',
-    role: 'COCINA',
-    avatar: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=150&h=150&q=80'
+    name: 'Chef Carlos Ríos',
+    email: 'carlos.chef@cellergourmet.com',
+    role: 'CHEF',
+    avatar: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Cocina Principal',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_carlos004'
   },
   {
     id: 'usr-5',
-    name: 'Lucía Ortiz',
-    email: 'lucia.recepcion@elceller.com',
-    role: 'RECEPCIÓN',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&h=150&q=80'
+    name: 'Andrés Gil',
+    email: 'andres.gil@cellergourmet.com',
+    role: 'ALMACEN_RECEPCION',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Almacén de Recepción',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_andres005'
+  },
+  {
+    id: 'usr-6',
+    name: 'Contadora Patricia',
+    email: 'patricia.contad@cellergourmet.com',
+    role: 'CONTABILIDAD',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Finanzas',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_patricia006'
+  },
+  {
+    id: 'usr-7',
+    name: 'Lic. Sergio Flores',
+    email: 'sergio.auditor@cellergourmet.com',
+    role: 'AUDITOR',
+    avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Contraloría',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_sergio007'
+  },
+  {
+    id: 'usr-8',
+    name: 'Mariana Ríos',
+    email: 'mariana.reader@cellergourmet.com',
+    role: 'SOLO_LECTURA',
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Lectura General',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_mariana008'
+  },
+  {
+    id: 'usr-9',
+    name: 'Pedro Cocinero',
+    email: 'pedro.cocina@cellergourmet.com',
+    role: 'COCINERO',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80',
+    status: 'ACTIVE',
+    hq: 'Sede Central',
+    area: 'Cocina Fría',
+    organizationId: 'Celler Gourmet',
+    sub: 'sub_pedro009'
   }
 ];
 

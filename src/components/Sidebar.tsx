@@ -21,6 +21,7 @@ import {
   Utensils
 } from 'lucide-react';
 import { User, Role } from '../types';
+import { store } from '../data/store';
 
 interface SidebarProps {
   currentUser: User;
@@ -41,15 +42,19 @@ export default function Sidebar({
 
   const getRoleBadgeColor = (role: Role) => {
     switch (role) {
-      case 'ADMIN': return 'bg-red-105 text-red-800 border-red-200';
-      case 'GERENTE': return 'bg-amber-105 text-amber-805 border-amber-200';
-      case 'COMPRAS': return 'bg-blue-105 text-blue-805 border-blue-200';
-      case 'COCINA': return 'bg-emerald-105 text-emerald-805 border-emerald-200';
-      case 'RECEPCIÓN': return 'bg-purple-105 text-purple-805 border-purple-200';
-      case 'CONTABILIDAD': return 'bg-indigo-105 text-indigo-805 border-indigo-200';
-      case 'AUDITOR': return 'bg-teal-105 text-teal-805 border-teal-200';
-      case 'LECTURA': return 'bg-slate-105 text-slate-805 border-slate-200';
-      default: return 'bg-gray-105 text-gray-805 border-gray-200';
+      case 'ADMIN': return 'bg-red-100 text-red-800 border-red-200';
+      case 'GERENTE': return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'COMPRAS': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'ALMACEN_RECEPCION':
+      case 'RECEPCIÓN': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'CHEF':
+      case 'COCINA': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'COCINERO': return 'bg-orange-100 text-orange-850 border-orange-200';
+      case 'CONTABILIDAD': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'AUDITOR': return 'bg-teal-100 text-teal-800 border-teal-200';
+      case 'SOLO_LECTURA':
+      case 'LECTURA': return 'bg-slate-100 text-slate-700 border-slate-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -68,6 +73,45 @@ export default function Sidebar({
     { id: 'Usuarios y roles', label: 'Usuarios y Roles', icon: Users },
     { id: 'Configuración', label: 'Configuración', icon: Settings },
   ];
+
+  // Dynamic filter according to system role evaluation!
+  const allowedItems = navItems.filter(item => {
+    // Admin bypasses checks
+    if (currentUser.role === 'ADMIN') return true;
+
+    switch (item.id) {
+      case 'Dashboard':
+        return store.hasPermission(currentUser, 'reports.view');
+      case 'Inventario':
+        return store.hasPermission(currentUser, 'inventory.view');
+      case 'Solicitudes de cocina':
+        return store.hasPermission(currentUser, 'requisition.create') || store.hasPermission(currentUser, 'requisition.approve') || store.hasPermission(currentUser, 'requisition.deliver');
+      case 'Compras':
+        return store.hasPermission(currentUser, 'purchase.view') || store.hasPermission(currentUser, 'purchase.create') || store.hasPermission(currentUser, 'purchase.update');
+      case 'Porcionamiento':
+        return store.hasPermission(currentUser, 'portioning.view') || store.hasPermission(currentUser, 'portioning.create');
+      case 'Menú y recetas':
+        // Both menus are cataloged as recipes / menus views
+        return store.hasPermission(currentUser, 'recipe.view') || store.hasPermission(currentUser, 'menu.view');
+      case 'Libro de compras':
+        return store.hasPermission(currentUser, 'purchase_book.view');
+      case 'Proveedores':
+        return store.hasPermission(currentUser, 'settings.manage') || store.hasPermission(currentUser, 'purchase.view');
+      case 'Movimientos':
+        return store.hasPermission(currentUser, 'inventory.view');
+      case 'Auditoría':
+        return store.hasPermission(currentUser, 'audit.view');
+      case 'Reportes':
+        return store.hasPermission(currentUser, 'reports.view');
+      case 'Usuarios y roles':
+        // Everyone should be allowed to switch/view roles matrix in this sandbox deployment
+        return true;
+      case 'Configuración':
+        return store.hasPermission(currentUser, 'settings.manage');
+      default:
+        return false;
+    }
+  });
 
   const handleSelectNav = (id: string) => {
     setActiveTab(id);
@@ -142,7 +186,7 @@ export default function Sidebar({
       {/* Navigation Items */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 animate-fade-in" id="nav-sidebar">
         <div className="px-3 mb-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">Módulos de Sistema</div>
-        {navItems.map((item) => {
+        {allowedItems.map((item) => {
           const IconComponent = item.icon;
           const isActive = activeTab === item.id;
           return (

@@ -2,11 +2,17 @@ export type Role =
   | 'ADMIN'
   | 'GERENTE'
   | 'COMPRAS'
-  | 'COCINA'
-  | 'RECEPCIÓN'
+  | 'ALMACEN_RECEPCION'
+  | 'CHEF'
+  | 'COCINERO'
   | 'CONTABILIDAD'
   | 'AUDITOR'
-  | 'LECTURA';
+  | 'SOLO_LECTURA'
+  | 'COCINA'     // Backwards compatibility alias for CHEF
+  | 'RECEPCIÓN'  // Backwards compatibility alias for ALMACEN_RECEPCION
+  | 'LECTURA';   // Backwards compatibility alias for SOLO_LECTURA
+
+export type UserStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'DISABLED' | 'SUSPENDED' | 'REJECTED';
 
 export interface User {
   id: string;
@@ -14,6 +20,13 @@ export interface User {
   email: string;
   role: Role;
   avatar: string;
+  status?: UserStatus;
+  hq?: string; // Sede central o área asignada
+  area?: string; // Área específica
+  organizationId?: string; // Organización asignada (e.g., Celler Gourmet)
+  sub?: string; // Google sub
+  dateOfRequest?: string; // Fecha de solicitud de acceso
+  specialPermissions?: string[]; // Permisos especiales / granulares si aplica
 }
 
 export interface Category {
@@ -741,12 +754,13 @@ export interface BasePreparation {
   standardPortionUnitId?: string; // Unidad de la porción operativa (ej: porciones)
   portionsExpected?: number; // Porciones teóricas esperadas (ej. 30)
   portionsReal?: number; // Porciones reales obtenidas (ej: 27)
-  totalCost: number; // Suma del costo de los ingredientes
-  costPerResultUnit: number; // Costo por unidad resultante (costo_total / cantidad_real)
+  totalCost?: number; // Suma del costo de los ingredientes
+  costPerResultUnit?: number; // Costo por unidad resultante (costo_total / cantidad_real)
   costPerPortion?: number; // Costo por porción (costo_total / porciones_reales)
   status: 'Activo' | 'Borrador' | 'Inactivo';
   responsibleUserId?: string;
-  createdAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   notes?: string;
 }
 

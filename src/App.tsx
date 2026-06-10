@@ -110,6 +110,18 @@ export default function App() {
     if (found) {
       store.setCurrentUser(found);
       setCurrentUser(found);
+      
+      const role = found.role;
+      if (role === 'COMPRAS') {
+        setActiveModule('Compras');
+      } else if (role === 'CHEF' || role === 'COCINERO' || role === 'COCINA') {
+        setActiveModule('Solicitudes de cocina');
+      } else if (role === 'CONTABILIDAD') {
+        setActiveModule('Libro de compras');
+      } else {
+        setActiveModule('Dashboard');
+      }
+
       reloadAllDataFromStore();
     }
   };
