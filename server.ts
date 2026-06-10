@@ -49,7 +49,13 @@ const DB_PATHS = {
   MENU_ALIASES: path.join(process.cwd(), "menu_aliases.json"),
   COMBOS: path.join(process.cwd(), "combos.json"),
   COMBO_ITEMS: path.join(process.cwd(), "combo_items.json"),
-  SALES_RECORDS: path.join(process.cwd(), "sales_records.json")
+  SALES_RECORDS: path.join(process.cwd(), "sales_records.json"),
+  SALES_IMPORTS: path.join(process.cwd(), "sales_imports.json"),
+  SALES_IMPORT_LINES: path.join(process.cwd(), "sales_import_lines.json"),
+  INGREDIENT_ALIASES: path.join(process.cwd(), "ingredient_aliases.json"),
+  RECIPE_IMPORTS: path.join(process.cwd(), "recipe_imports.json"),
+  RECIPE_IMPORT_LINES: path.join(process.cwd(), "recipe_import_lines.json"),
+  RECIPE_AUDITS: path.join(process.cwd(), "recipe_audits.json")
 };
 
 function readJsonFile<T>(filePath: string, defaultVal: T): T {
@@ -1885,6 +1891,38 @@ function getComboItems(): any[] {
   return readJsonFile<any[]>(DB_PATHS.COMBO_ITEMS, defaultComboItems);
 }
 
+function getIngredientAliases(): any[] {
+  return readJsonFile<any[]>(DB_PATHS.INGREDIENT_ALIASES, []);
+}
+function getRecipeImports(): any[] {
+  return readJsonFile<any[]>(DB_PATHS.RECIPE_IMPORTS, []);
+}
+function getRecipeImportLines(): any[] {
+  return readJsonFile<any[]>(DB_PATHS.RECIPE_IMPORT_LINES, []);
+}
+function getRecipeAudits(): any[] {
+  return readJsonFile<any[]>(DB_PATHS.RECIPE_AUDITS, []);
+}
+
+function writeRecipeAudit(action: string, comment: string, recordId?: string, previousValue?: string, newValue?: string) {
+  const audits = getRecipeAudits();
+  const newAudit = {
+    id: "aud-rec-" + Math.random().toString(36).substr(2, 9),
+    userId: "usr-admin",
+    userName: "Carlos Admin",
+    userRole: "ADMIN",
+    action,
+    module: "Menú y Fichas Técnicas",
+    recordId,
+    previousValue,
+    newValue,
+    date: new Date().toISOString(),
+    comment
+  };
+  audits.push(newAudit);
+  writeJsonFile(DB_PATHS.RECIPE_AUDITS, audits);
+}
+
 
 // --- API ROUTING IMPLEMENTATION ---
 
@@ -2348,6 +2386,890 @@ app.delete("/api/v1/recipes/:id/ingredients/:ingredientId", (req, res) => {
   res.status(200).json({ success: true, message: "Ingrediente eliminado.", recipe: recipes[recipeIdx] });
 });
 
+// --- CUSTOM RECIPE MANAGEMENT ENDPOINTS ---
+
+// 1. GET ALL RECIPES FOR ITEM
+app.get("/api/v1/menu/items/:id/recipes", (req, res) => {
+  const recipes = getRecipes().filter(r => r.menuItemId === req.params.id);
+  res.status(200).json({ success: true, recipes });
+});
+
+// 2. CREATE A NEW RECIPE MANUAL
+app.post("/api/v1/menu/items/:id/recipes", (req, res) => {
+  const menuItemId = req.params.id;
+  const { version, status, theoreticalCost, foodCostPercentage, changeReason, ingredients = [] } = req.body;
+
+  const recipes = getRecipes();
+  const ingredientsDb = getRecipeIngredients();
+
+  // If this new recipe is set to ACTIVE, deactivate other versions of this item
+  const isRecipeActive = status === "ACTIVE";
+  if (isRecipeActive) {
+    recipes.forEach(r => {
+      if (r.menuItemId === menuItemId) {
+        r.isActive = false;
+        r.status = "INACTIVE";
+        r.activeTo = new Date().toISOString().split("T")[0];
+      }
+    });
+  }
+
+  const recipeId = "rec-menu-" + Math.random().toString(36).substr(2, 9);
+  
+  // Create ingredients
+  const processedIngredients = ingredients.map((ing: any, i: number) => {
+    const qty = Number(ing.quantity || 0);
+    const cost = Number(ing.costUnit || 0);
+    const waste = Number(ing.wastePercentage || 0);
+    const totalCost = qty * cost * (1 + waste/100);
+
+    return {
+      id: `ing-${recipeId}-${i}-${Math.random().toString(36).substr(2, 5)}`,
+      recipeId,
+      productId: ing.productId || null,
+      portionProductId: ing.portionProductId || null,
+      quantity: qty,
+      unitId: ing.unitId || "und",
+      wastePercentage: waste,
+      costUnit: cost,
+      totalCost: Math.round(totalCost * 100) / 100,
+      deductionType: ing.deductionType || "UNIT",
+      isOptional: ing.isOptional === true,
+      notes: ing.notes || "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  const newRecipe = {
+    id: recipeId,
+    menuItemId,
+    version: version || "v" + String(recipes.filter(r => r.menuItemId === menuItemId).length + 1),
+    status: status || "DRAFT",
+    isActive: isRecipeActive,
+    activeFrom: isRecipeActive ? new Date().toISOString().split("T")[0] : null,
+    activeTo: null,
+    theoreticalCost: Math.round(Number(theoreticalCost || 0) * 100) / 100,
+    foodCostPercentage: Number(foodCostPercentage || 0),
+    changeReason: changeReason || "Registro manual",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  recipes.push(newRecipe);
+  ingredientsDb.push(...processedIngredients);
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredientsDb);
+
+  // Write audit trail
+  writeRecipeAudit(
+    "Receta Creada",
+    `Creada ficha técnica v${newRecipe.version} para el plato ${menuItemId}. Ingredientes: ${processedIngredients.length}.`,
+    recipeId,
+    null,
+    JSON.stringify(newRecipe)
+  );
+
+  res.status(201).json({
+    success: true,
+    recipe: newRecipe,
+    ingredients: processedIngredients
+  });
+});
+
+// 3. GET SINGLE RECIPE DETAILS
+app.get("/api/v1/recipes/:id", (req, res) => {
+  const recipe = getRecipes().find(r => r.id === req.params.id);
+  if (!recipe) return res.status(404).json({ success: false, error: "Receta no encontrada." });
+  const ingredients = getRecipeIngredients().filter(ing => ing.recipeId === req.params.id);
+  res.status(200).json({ success: true, recipe, ingredients });
+});
+
+// 4. ACTIVATE RECIPE VERSION
+app.post("/api/v1/recipes/:id/activate", (req, res) => {
+  const recipes = getRecipes();
+  const targetId = req.params.id;
+  const target = recipes.find(r => r.id === targetId);
+  if (!target) return res.status(404).json({ success: false, error: "Receta no encontrada." });
+
+  const prevActive = recipes.find(r => r.menuItemId === target.menuItemId && r.isActive);
+
+  // Deactivate all for same menu item
+  recipes.forEach(r => {
+    if (r.menuItemId === target.menuItemId) {
+      r.isActive = r.id === targetId;
+      r.status = r.id === targetId ? "ACTIVE" : "INACTIVE";
+      if (r.id === targetId) {
+        r.activeFrom = new Date().toISOString().split("T")[0];
+        r.activeTo = null;
+      } else if (r.isActive) {
+        r.activeTo = new Date().toISOString().split("T")[0];
+      }
+    }
+  });
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+
+  // Write Audit Trail
+  writeRecipeAudit(
+    "Receta Activada",
+    `Activada ficha versión ${target.version} de plato ${target.menuItemId}.`,
+    targetId,
+    prevActive ? prevActive.version : "Ninguna",
+    target.version
+  );
+
+  res.status(200).json({ success: true, message: `Ficha técnica activada correctamente para versión ${target.version}.` });
+});
+
+// 5. ARCHIVE RECIPE VERSION
+app.post("/api/v1/recipes/:id/archive", (req, res) => {
+  const recipes = getRecipes();
+  const targetId = req.params.id;
+  const idx = recipes.findIndex(r => r.id === targetId);
+  if (idx === -1) return res.status(404).json({ success: false, error: "Receta no encontrada." });
+
+  const prevStatus = recipes[idx].status;
+  recipes[idx].status = "ARCHIVED";
+  recipes[idx].isActive = false;
+  recipes[idx].updatedAt = new Date().toISOString();
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+
+  writeRecipeAudit(
+    "Receta Archivada",
+    `Version ${recipes[idx].version} archivada del plato ${recipes[idx].menuItemId}.`,
+    targetId,
+    prevStatus,
+    "ARCHIVED"
+  );
+
+  res.status(200).json({ success: true, message: "Receta archivada." });
+});
+
+// 6. NEW RECIPE VERSION (clones an existing recipe layout to support version changes)
+app.post("/api/v1/recipes/:id/new-version", (req, res) => {
+  const recipes = getRecipes();
+  const originRecipe = recipes.find(r => r.id === req.params.id);
+  if (!originRecipe) return res.status(404).json({ success: false, error: "Receta de origen no encontrada." });
+
+  const menuItemId = originRecipe.menuItemId;
+  const ingredientsDb = getRecipeIngredients();
+  const originIngredients = ingredientsDb.filter(i => i.recipeId === originRecipe.id);
+
+  const nextVerNumber = recipes.filter(r => r.menuItemId === menuItemId).length + 1;
+  const newRecipeId = "rec-menu-" + Math.random().toString(36).substr(2, 9);
+
+  const newRecipe = {
+    ...originRecipe,
+    id: newRecipeId,
+    version: "v" + nextVerNumber,
+    status: "DRAFT",
+    isActive: false,
+    activeFrom: null,
+    activeTo: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  const clonedIngredients = originIngredients.map((i, idx) => ({
+    ...i,
+    id: `ing-${newRecipeId}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+    recipeId: newRecipeId,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }));
+
+  recipes.push(newRecipe);
+  ingredientsDb.push(...clonedIngredients);
+
+  writeJsonFile(DB_PATHS.RECIPES, recipes);
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredientsDb);
+
+  writeRecipeAudit(
+    "Nueva versión creada",
+    `Clonada versión ${originRecipe.version} a nueva versión borrador ${newRecipe.version} para plato ${menuItemId}.`,
+    newRecipeId
+  );
+
+  res.status(201).json({ success: true, recipe: newRecipe, ingredients: clonedIngredients });
+});
+
+// 7. RECIPE IMPORT ENDPOINTS:
+// A. Upload file list or CSV text
+app.post("/api/v1/recipes/import/upload", (req, res) => {
+  const { fileName, fileType, rawDataInput, csvText } = req.body;
+  if (!csvText && !rawDataInput) {
+    return res.status(400).json({ success: false, error: "Contenido de archivo CSV o datos de recetas no encontrados." });
+  }
+
+  const imports = getRecipeImports();
+  const importLines = getRecipeImportLines();
+
+  const importId = "imp-rec-" + Math.random().toString(36).substr(2, 9);
+  
+  let rowsToProcess: any[] = [];
+  if (csvText) {
+    // parse CSV text
+    const parsed = parseCsv(csvText);
+    if (parsed.length > 1) {
+      const headers = parsed[0].map(h => h.trim().toLowerCase());
+      // extract content rows
+      for (let i = 1; i < parsed.length; i++) {
+        const rowData: Record<string, string> = {};
+        parsed[i].forEach((cell, idx) => {
+          if (headers[idx]) {
+            rowData[headers[idx]] = cell;
+          }
+        });
+        rowsToProcess.push(rowData);
+      }
+    }
+  } else if (rawDataInput) {
+    rowsToProcess = rawDataInput;
+  }
+
+  if (rowsToProcess.length === 0) {
+    return res.status(400).json({ success: false, error: "No se encontraron filas con contenido en el archivo." });
+  }
+
+  // Determine headers
+  const sample = rowsToProcess[0];
+  const originalColumns = Object.keys(sample).map(key => {
+    // Detect system field suggestions
+    const norm = key.toLowerCase().trim();
+    let suggestedField = "ignorar";
+    
+    // Fuzzy check for requested keys
+    if (["plato", "receta", "producto venta", "menu", "nombre_plato", "nombre_plato_venta"].includes(norm)) suggestedField = "plato";
+    else if (["codigo_plato", "codigo", "codigo plato", "ref_plato"].includes(norm)) suggestedField = "codigo_plato";
+    else if (["categoria_menu", "categoria", "categoria menu", "tipo_plato"].includes(norm)) suggestedField = "categoria_menu";
+    else if (["precio_venta", "precio", "precio venta", "sale_price"].includes(norm)) suggestedField = "precio_venta";
+    else if (["ingrediente", "insumo", "producto inventario", "item_receta"].includes(norm)) suggestedField = "ingrediente";
+    else if (["cantidad", "cant", "qty", "cantidad_usada", "cant."].includes(norm)) suggestedField = "cantidad";
+    else if (["unidad", "um", "medida", "unidad_medida", "um_ingrediente"].includes(norm)) suggestedField = "unidad";
+    else if (["tipo_ingrediente", "tipo", "tipo_insumo"].includes(norm)) suggestedField = "tipo_ingrediente";
+    else if (["merma", "merma %", "desperdicio"].includes(norm)) suggestedField = "merma";
+    else if (["costo_unitario", "costo", "rate"].includes(norm)) suggestedField = "costo_unitario";
+    else if (["observaciones", "notas", "comentario"].includes(norm)) suggestedField = "observaciones";
+
+    return {
+      id: "col-" + Math.random().toString(36).substr(2, 5),
+      originalName: key,
+      suggestedField,
+      selectedField: suggestedField
+    };
+  });
+
+  const parsedLines = rowsToProcess.map((row, idx) => ({
+    id: `impl-${importId}-${idx}`,
+    recipeImportId: importId,
+    rowNumber: idx + 1,
+    rawData: row,
+    normalizedData: {},
+    status: "PENDING",
+    errorMessage: "",
+    createdAt: new Date().toISOString()
+  }));
+
+  const newImport = {
+    id: importId,
+    fileName: fileName || "Pasted_Recipes.csv",
+    fileType: fileType || "CSV",
+    status: "MAPPING_REQUIRED",
+    totalRows: rowsToProcess.length,
+    detectedRecipes: 0,
+    validRecipes: 0,
+    errorRows: 0,
+    createdAt: new Date().toISOString(),
+    columns: originalColumns
+  };
+
+  imports.push(newImport);
+  importLines.push(...parsedLines);
+
+  writeJsonFile(DB_PATHS.RECIPE_IMPORTS, imports);
+  writeJsonFile(DB_PATHS.RECIPE_IMPORT_LINES, importLines);
+
+  res.status(201).json({ success: true, data: newImport, columns: originalColumns });
+});
+
+// B. Save Column Mappings and Run Analysis
+app.post("/api/v1/recipes/import/:id/map-columns", (req, res) => {
+  const { columnMappings } = req.body; // e.g. Record<originalColumnName, systemFieldName>
+  const imports = getRecipeImports();
+  const impIdx = imports.findIndex(i => i.id === req.params.id);
+  if (impIdx === -1) return res.status(404).json({ success: false, error: "Importación no encontrada." });
+
+  // Update selected fields in columns
+  imports[impIdx].columns.forEach((col: any) => {
+    if (columnMappings[col.originalName]) {
+      col.selectedField = columnMappings[col.originalName];
+    }
+  });
+
+  imports[impIdx].status = "ANALYZING";
+  writeJsonFile(DB_PATHS.RECIPE_IMPORTS, imports);
+
+  res.status(200).json({ success: true, data: imports[impIdx] });
+});
+
+// C. Run Analysis and Validation
+app.post("/api/v1/recipes/import/:id/analyze", (req, res) => {
+  const imports = getRecipeImports();
+  const impIdx = imports.findIndex(i => i.id === req.params.id);
+  if (impIdx === -1) return res.status(404).json({ success: false, error: "Importación no encontrada." });
+
+  const mapping = imports[impIdx].columns.reduce((acc: any, col: any) => {
+    if (col.selectedField !== "ignorar") {
+      acc[col.selectedField] = col.originalName;
+    }
+    return acc;
+  }, {});
+
+  const allLines = getRecipeImportLines();
+  const lines = allLines.filter(l => l.recipeImportId === req.params.id);
+
+  lines.forEach(line => {
+    const raw = line.rawData;
+    const norm: any = {};
+
+    Object.keys(mapping).forEach(field => {
+      const colName = mapping[field];
+      norm[field] = raw[colName] || "";
+    });
+
+    line.normalizedData = norm;
+
+    // Validation
+    const errors: string[] = [];
+    if (!norm.plato) {
+      errors.push("Falta nombre del plato.");
+    }
+    if (!norm.ingrediente) {
+      errors.push("Falta nombre del ingrediente.");
+    }
+    
+    const qty = Number(norm.cantidad || 0);
+    if (isNaN(qty) || qty <= 0) {
+      errors.push("La cantidad debe ser un número mayor que 0.");
+    }
+
+    if (errors.length > 0) {
+      line.status = "ERROR";
+      line.errorMessage = errors.join(" ");
+    } else {
+      line.status = "VALID";
+      line.errorMessage = "";
+    }
+  });
+
+  // Calculate distinct dishes and group ingredients
+  const dishesGroup: Record<string, any[]> = {};
+  lines.forEach(l => {
+    if (l.status === "VALID") {
+      const pName = l.normalizedData.plato;
+      if (!dishesGroup[pName]) dishesGroup[pName] = [];
+      dishesGroup[pName].push(l);
+    }
+  });
+
+  const uniqueDishes = Object.keys(dishesGroup);
+  imports[impIdx].detectedRecipes = uniqueDishes.length;
+  imports[impIdx].status = "READY_TO_CONFIRM";
+  imports[impIdx].errorRows = lines.filter(l => l.status === "ERROR").length;
+
+  writeJsonFile(DB_PATHS.RECIPE_IMPORT_LINES, allLines);
+  writeJsonFile(DB_PATHS.RECIPE_IMPORTS, imports);
+
+  res.status(200).json({ success: true, data: imports[impIdx] });
+});
+
+// D. GET Preview metrics
+app.get("/api/v1/recipes/import/:id/preview", (req, res) => {
+  const imports = getRecipeImports();
+  const target = imports.find(i => i.id === req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: "Importación no encontrada." });
+
+  const lines = getRecipeImportLines().filter(l => l.recipeImportId === req.params.id);
+  
+  // Parse products query
+  let products: any[] = [];
+  try {
+    if (req.query.products) {
+      products = JSON.parse(req.query.products as string);
+    }
+  } catch (ex) {
+    products = [];
+  }
+
+  const aliases = getIngredientAliases();
+
+  // Group lines by dishes
+  const groupedRecipes: Record<string, any> = {};
+  lines.forEach(l => {
+    if (l.status !== "VALID") return;
+    const dName = l.normalizedData.plato;
+    if (!groupedRecipes[dName]) {
+      groupedRecipes[dName] = {
+        name: dName,
+        code: l.normalizedData.codigo_plato || "",
+        category: l.normalizedData.categoria_menu || "Otros",
+        salePrice: Number(l.normalizedData.precio_venta || 0),
+        ingredients: []
+      };
+    }
+
+    const rawIngName = l.normalizedData.ingrediente || "";
+    // Match against inventory
+    const matchedAlias = aliases.find(a => a.rawIngredientName.toLowerCase().trim() === rawIngName.toLowerCase().trim());
+    let linkedProduct = null;
+    let confidence = 0;
+    let isLinked = false;
+
+    if (matchedAlias) {
+      linkedProduct = products.find((p: any) => p.id === matchedAlias.linkedProductId);
+      if (linkedProduct) {
+        isLinked = true;
+        confidence = matchedAlias.confidenceScore || 100;
+      }
+    }
+
+    if (!isLinked) {
+      // Fuzzy match
+      let bestScore = 0;
+      let matchObj: any = null;
+      products.forEach((p: any) => {
+        const sc = computeSimilarity(p.name, rawIngName);
+        if (sc > bestScore) {
+          bestScore = sc;
+          matchObj = p;
+        }
+      });
+      if (bestScore >= 70 && matchObj) {
+        linkedProduct = matchObj;
+        confidence = bestScore;
+      }
+    }
+
+    const qty = Number(l.normalizedData.cantidad || 0);
+    const waste = Number(l.normalizedData.merma || 0);
+    const costUnit = Number(l.normalizedData.costo_unitario || (linkedProduct ? (linkedProduct.averageCost || 0) : 0));
+    const totalCost = qty * costUnit * (1 + waste / 100);
+
+    groupedRecipes[dName].ingredients.push({
+      id: l.id,
+      rawName: rawIngName,
+      quantity: qty,
+      unitId: l.normalizedData.unitId || l.normalizedData.unidad || "und",
+      wastePercentage: waste,
+      costUnit,
+      totalCost,
+      linkedProduct,
+      confidence,
+      isLinked: linkedProduct !== null,
+      notes: l.normalizedData.observaciones || ""
+    });
+  });
+
+  // Add calculations
+  const recipesList = Object.values(groupedRecipes).map((r: any) => {
+    const sumCost = r.ingredients.reduce((acc: number, ing: any) => acc + ing.totalCost, 0);
+    const margin = r.salePrice > 0 ? r.salePrice - sumCost : 0;
+    const foodCost = r.salePrice > 0 ? (sumCost / r.salePrice) * 100 : 0;
+
+    return {
+      ...r,
+      theoreticalCost: Math.round(sumCost * 100) / 100,
+      marginAmount: Math.round(margin * 100) / 100,
+      marginPercentage: r.salePrice > 0 ? Math.round((margin / r.salePrice) * 1000) / 10 : 0,
+      foodCostPercentage: Math.round(foodCost * 10) / 10,
+      isPriceMissing: r.salePrice <= 0,
+      hasUnlinked: r.ingredients.some((ing: any) => !ing.isLinked)
+    };
+  });
+
+  const totals = {
+    totalPlates: recipesList.length,
+    newPlates: recipesList.filter((r: any) => !getMenuItems().some(item => item.name.toLowerCase().trim() === r.name.toLowerCase().trim())).length,
+    unlinkedIngredients: lines.filter(l => l.status === "VALID").reduce((acc, l) => {
+      const rawIn = l.normalizedData.ingrediente;
+      const isL = aliases.some(a => a.rawIngredientName.toLowerCase().trim() === rawIn.toLowerCase().trim());
+      return acc + (isL ? 0 : 1);
+    }, 0),
+    withWarnings: recipesList.filter((r: any) => r.isPriceMissing || r.hasUnlinked).length
+  };
+
+  res.status(200).json({
+    success: true,
+    importSession: target,
+    recipes: recipesList,
+    totals,
+    linesCount: lines.length,
+    errorCount: target.errorRows
+  });
+});
+
+// E. CONFIRM AND COMMIT RECIPE IMPORT BATCH
+app.post("/api/v1/recipes/import/:id/confirm", (req, res) => {
+  const { recipes = [] } = req.body;
+  const imports = getRecipeImports();
+  const impIdx = imports.findIndex(i => i.id === req.params.id);
+  if (impIdx === -1) return res.status(404).json({ success: false, error: "Importación no encontrada." });
+
+  const menuItems = getMenuItems();
+  const menuCategories = getMenuCategories();
+  const recipesDb = getRecipes();
+  const ingredientsDb = getRecipeIngredients();
+  const aliases = getIngredientAliases();
+
+  // Create standard category if missing
+  let defaultCategory = menuCategories[0];
+  if (!defaultCategory) {
+    defaultCategory = { id: "cat-menu-imported", name: "Importados", description: "Categoría de platos importados", createdAt: new Date().toISOString() };
+    menuCategories.push(defaultCategory);
+    writeJsonFile(DB_PATHS.MENU_CATEGORIES, menuCategories);
+  }
+
+  let createdPlatesCount = 0;
+  let updatedPlatesCount = 0;
+
+  recipes.forEach((r: any) => {
+    // 1. Resolve menu item
+    let item = menuItems.find(m => m.name.toLowerCase().trim() === r.name.toLowerCase().trim());
+    if (!item) {
+      item = {
+        id: "item-menu-" + Math.random().toString(36).substr(2, 9),
+        code: r.code || "PL-IMP-" + String(menuItems.length + 1).padStart(3, "0"),
+        name: r.name,
+        categoryId: defaultCategory.id,
+        salePrice: Number(r.salePrice || 0),
+        isActive: true,
+        deductsInventory: true,
+        requiresRecipe: true,
+        productionArea: "Cocina",
+        preparationTime: 15,
+        notes: "Importado automáticamente por asistente de archivo",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      menuItems.push(item);
+      createdPlatesCount++;
+    } else {
+      item.salePrice = Number(r.salePrice || item.salePrice);
+      item.updatedAt = new Date().toISOString();
+      updatedPlatesCount++;
+    }
+
+    // Deactivate previous recipe versions
+    recipesDb.forEach(oldR => {
+      if (oldR.menuItemId === item.id) {
+        oldR.isActive = false;
+        oldR.status = "INACTIVE";
+        oldR.activeTo = new Date().toISOString().split("T")[0];
+      }
+    });
+
+    // Create the new active recipe version
+    const newRecipeId = "rec-menu-" + Math.random().toString(36).substr(2, 9);
+    const sumCost = r.ingredients.reduce((acc: number, ing: any) => acc + (ing.totalCost || 0), 0);
+    const foodCost = r.salePrice > 0 ? (sumCost / r.salePrice) * 100 : 0;
+
+    const newRec = {
+      id: newRecipeId,
+      menuItemId: item.id,
+      version: "v" + String(recipesDb.filter(re => re.menuItemId === item.id).length + 1),
+      status: r.status || "ACTIVE",
+      isActive: r.status !== "DRAFT",
+      activeFrom: r.status !== "DRAFT" ? new Date().toISOString().split("T")[0] : null,
+      activeTo: null,
+      theoreticalCost: Math.round(sumCost * 100) / 100,
+      foodCostPercentage: Math.round(foodCost * 10) / 10,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      changeReason: "Importación masiva desde archivo"
+    };
+
+    recipesDb.push(newRec);
+
+    // Save recipe ingredients
+    r.ingredients.forEach((ing: any, idx: number) => {
+      // Record aliases dynamically if vinculated during wizard
+      if (ing.rawName && ing.linkedProductId) {
+        const hasAlias = aliases.some(a => a.rawIngredientName.toLowerCase().trim() === ing.rawName.toLowerCase().trim());
+        if (!hasAlias) {
+          aliases.push({
+            id: "ali-ing-" + Math.random().toString(36).substr(2, 9),
+            rawIngredientName: ing.rawName,
+            linkedProductId: ing.linkedProductId,
+            confidenceScore: 100,
+            timesConfirmed: 1,
+            lastConfirmedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
+
+      ingredientsDb.push({
+        id: `ing-${newRecipeId}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+        recipeId: newRecipeId,
+        productId: ing.linkedProductId || null,
+        portionProductId: ing.deductionType === "PORTION" ? ing.linkedProductId : null,
+        quantity: Number(ing.quantity || 0),
+        unitId: ing.unitId || "und",
+        wastePercentage: Number(ing.wastePercentage || 0),
+        costUnit: Number(ing.costUnit || 0),
+        totalCost: Math.round(Number(ing.totalCost || 0) * 100) / 100,
+        deductionType: ing.deductionType || "UNIT",
+        isOptional: false,
+        notes: ing.notes || ing.rawName || "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    });
+
+    writeRecipeAudit(
+      "Receta Importada",
+      `Ficha técnica importada para el plato ${item.name} (${item.code}).`,
+      newRecipeId
+    );
+  });
+
+  imports[impIdx].status = "IMPORTED";
+  imports[impIdx].confirmedAt = new Date().toISOString();
+
+  writeJsonFile(DB_PATHS.MENU_ITEMS, menuItems);
+  writeJsonFile(DB_PATHS.RECIPES, recipesDb);
+  writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredientsDb);
+  writeJsonFile(DB_PATHS.INGREDIENT_ALIASES, aliases);
+  writeJsonFile(DB_PATHS.RECIPE_IMPORTS, imports);
+
+  res.status(200).json({
+    success: true,
+    message: `Importación confirmada. Se crearon ${createdPlatesCount} platos y se actualizaron ${updatedPlatesCount} platos en el catálogo de recetas.`,
+    created: createdPlatesCount,
+    updated: updatedPlatesCount
+  });
+});
+
+// F. CANCEL IMPORT
+app.post("/api/v1/recipes/import/:id/cancel", (req, res) => {
+  const imports = getRecipeImports();
+  const impIdx = imports.findIndex(i => i.id === req.params.id);
+  if (impIdx === -1) return res.status(404).json({ success: false, error: "Importación no encontrada." });
+
+  imports[impIdx].status = "CANCELLED";
+  writeJsonFile(DB_PATHS.RECIPE_IMPORTS, imports);
+  res.status(200).json({ success: true, message: "Importación cancelada." });
+});
+
+// G. GET HISTORY OF IMPORT
+app.get("/api/v1/recipes/import/history", (req, res) => {
+  res.status(200).json({ success: true, history: getRecipeImports() });
+});
+
+// H. GET IMPORT ERRORS
+app.get("/api/v1/recipes/import/:id/errors", (req, res) => {
+  const lines = getRecipeImportLines().filter(l => l.recipeImportId === req.params.id && l.status === "ERROR");
+  res.status(200).json({ success: true, errors: lines });
+});
+
+
+// 8. INGREDIENTES NO VINCULADOS & ALIASES:
+// A. Get unlinked ingredients
+app.get("/api/v1/recipes/unlinked-ingredients", (req, res) => {
+  const ingredients = getRecipeIngredients();
+  const menuItems = getMenuItems();
+  const recipes = getRecipes();
+  const aliases = getIngredientAliases();
+
+  // Find all recipe ingredients that lack productId and portionProductId (meaning unlinked / raw name representation)
+  // Or check across all imported rows
+  const unlinked: any[] = [];
+  
+  // Also scan active recipe ingredients loaded as unlinked
+  ingredients.forEach(ing => {
+    if (!ing.productId && !ing.portionProductId) {
+      const rec = recipes.find(r => r.id === ing.recipeId);
+      const mItem = rec ? menuItems.find(m => m.id === rec.menuItemId) : null;
+      
+      const rawIn = ing.notes || "Ingrediente Desconocido";
+      const hasAlias = aliases.some(a => a.rawIngredientName.toLowerCase().trim() === rawIn.toLowerCase().trim() && (a.linkedProductId || a.linkedPortionProductId));
+      
+      if (!hasAlias) {
+        unlinked.push({
+          id: ing.id,
+          recipeId: ing.recipeId,
+          rawIngredientName: rawIn,
+          plateName: mItem ? mItem.name : "Receta No Identificada",
+          quantity: ing.quantity,
+          unitId: ing.unitId,
+          createdAt: ing.createdAt
+        });
+      }
+    }
+  });
+
+  res.status(200).json({ success: true, unlinkedIngredients: unlinked });
+});
+
+// B. Link ingredient name directly to product
+app.post("/api/v1/recipes/link-ingredient", (req, res) => {
+  const { rawIngredientName, productId, preparedItemId, portionProductId, confidenceScore } = req.body;
+  if (!rawIngredientName || (!productId && !portionProductId && !preparedItemId)) {
+    return res.status(400).json({ success: false, error: "Nombre del ingrediente y el ID del producto relacionado son requeridos." });
+  }
+
+  const aliases = getIngredientAliases();
+  const existingIdx = aliases.findIndex(a => a.rawIngredientName.toLowerCase().trim() === rawIngredientName.toLowerCase().trim());
+
+  const record = {
+    id: existingIdx !== -1 ? aliases[existingIdx].id : "ali-ing-" + Math.random().toString(36).substr(2, 9),
+    rawIngredientName,
+    linkedProductId: productId || null,
+    linkedPreparedItemId: preparedItemId || null,
+    linkedPortionProductId: portionProductId || null,
+    confidenceScore: confidenceScore || 100,
+    timesConfirmed: existingIdx !== -1 ? aliases[existingIdx].timesConfirmed + 1 : 1,
+    lastConfirmedAt: new Date().toISOString(),
+    createdAt: existingIdx !== -1 ? aliases[existingIdx].createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (existingIdx !== -1) {
+    aliases[existingIdx] = record;
+  } else {
+    aliases.push(record);
+  }
+
+  writeJsonFile(DB_PATHS.INGREDIENT_ALIASES, aliases);
+
+  // Propagate to existing recipe ingredients that match raw name!
+  const ingredients = getRecipeIngredients();
+  let updatedCount = 0;
+  
+  ingredients.forEach(ing => {
+    const ingNotes = ing.notes || "";
+    if (!ing.productId && !ing.portionProductId && ingNotes.toLowerCase().trim() === rawIngredientName.toLowerCase().trim()) {
+      ing.productId = productId || null;
+      ing.portionProductId = portionProductId || null;
+      ing.updatedAt = new Date().toISOString();
+      updatedCount++;
+    }
+  });
+
+  if (updatedCount > 0) {
+    writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, ingredients);
+  }
+
+  writeRecipeAudit(
+    "Ingrediente Vinculado",
+    `Vinculado el ingrediente crudo "${rawIngredientName}" con el producto ID ${productId || portionProductId}.`
+  );
+
+  res.status(200).json({ success: true, data: record, updatedCount });
+});
+
+// C. Post Ingredient Alias
+app.post("/api/v1/ingredient-aliases", (req, res) => {
+  const { rawIngredientName, linkedProductId, linkedPreparedItemId, linkedPortionProductId } = req.body;
+  if (!rawIngredientName) {
+    return res.status(400).json({ success: false, error: "rawIngredientName es requerido." });
+  }
+
+  const aliases = getIngredientAliases();
+  const id = "ali-ing-" + Math.random().toString(36).substr(2, 9);
+  const newAlias = {
+    id,
+    rawIngredientName,
+    linkedProductId: linkedProductId || null,
+    linkedPreparedItemId: linkedPreparedItemId || null,
+    linkedPortionProductId: linkedPortionProductId || null,
+    confidenceScore: 100,
+    timesConfirmed: 1,
+    lastConfirmedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  aliases.push(newAlias);
+  writeJsonFile(DB_PATHS.INGREDIENT_ALIASES, aliases);
+
+  res.status(201).json({ success: true, data: newAlias });
+});
+
+// 9. GET RECIPE AUDIT HISTORY LIST
+app.get("/api/v1/recipes/audit-history", (req, res) => {
+  res.status(200).json({ success: true, audits: getRecipeAudits() });
+});
+
+// 10. GET INCOMPLETE RECIPES REPORT
+app.get("/api/v1/recipes/incomplete-report", (req, res) => {
+  const menuItems = getMenuItems();
+  const recipes = getRecipes();
+  const ingredientsDb = getRecipeIngredients();
+
+  const incompleteList: any[] = [];
+
+  menuItems.forEach(item => {
+    const activeRec = recipes.find(r => r.menuItemId === item.id && r.isActive);
+    
+    if (item.requiresRecipe && !activeRec) {
+      incompleteList.push({
+        id: "inc-" + Math.random().toString(36).substr(2, 9),
+        item,
+        problem: "El plato requiere receta pero no tiene ninguna activa.",
+        recommendation: "Cree una receta manual o importe un archivo de fichas técnicas para este plato."
+      });
+    } else if (activeRec) {
+      const ings = ingredientsDb.filter(i => i.recipeId === activeRec.id);
+      if (ings.length === 0) {
+        incompleteList.push({
+          id: "inc-" + Math.random().toString(36).substr(2, 9),
+          item,
+          recipe: activeRec,
+          problem: "La ficha técnica activa no tiene ingredientes asignados.",
+          recommendation: "Agregue ingredientes a la receta actual para poder descontar inventario."
+        });
+      } else {
+        const hasUnlinkedIng = ings.some(i => !i.productId && !i.portionProductId);
+        if (hasUnlinkedIng) {
+          incompleteList.push({
+            id: "inc-" + Math.random().toString(36).substr(2, 9),
+            item,
+            recipe: activeRec,
+            problem: "Tiene ingredientes en la ficha sin vincular a productos de inventario reales.",
+            recommendation: "Vaya al menú 'Ingredientes no vinculados' o edite la receta para seleccionar productos reales."
+          });
+        }
+        if (item.salePrice <= 0) {
+          incompleteList.push({
+            id: "inc-" + Math.random().toString(36).substr(2, 9),
+            item,
+            recipe: activeRec,
+            problem: "El plato no tiene precio de venta asignado.",
+            recommendation: "Modifique el precio de venta en el catálogo de platos para calcular margen y food cost."
+          });
+        }
+        const hasZeroCost = ings.some(i => (i.costUnit || 0) <= 0);
+        if (hasZeroCost) {
+          incompleteList.push({
+            id: "inc-" + Math.random().toString(36).substr(2, 9),
+            item,
+            recipe: activeRec,
+            problem: "Falta definir costos para algunos ingredientes o su costo asociado es cero.",
+            recommendation: "Actualice el costo de los ingredientes de la receta desde el panel de edición."
+          });
+        }
+      }
+    }
+  });
+
+  res.status(200).json({ success: true, incomplete: incompleteList });
+});
+
 // Plato Aliases
 app.get("/api/v1/menu-aliases", (req, res) => {
   res.status(200).json({ success: true, data: getMenuAliases() });
@@ -2724,6 +3646,1047 @@ function evaluateDeductions(
     generatedPortionMovements
   };
 }
+
+
+// --- DETAILED SALES OPERATIONS: MANUAL SALES & MASS IMPORT ---
+
+// Helper to get helper files of sales imports
+function getSalesImports() {
+  return readJsonFile<any[]>(DB_PATHS.SALES_IMPORTS, []);
+}
+function getSalesImportLines() {
+  return readJsonFile<any[]>(DB_PATHS.SALES_IMPORT_LINES, []);
+}
+
+// 1. MANUAL SALE PREVIEW
+app.post("/api/v1/sales/manual/preview", (req, res) => {
+  const { menuItemId, quantity, date, time, channel, shift, reference, comment, products = [] } = req.body;
+  if (!menuItemId || !quantity) {
+    return res.status(400).json({ success: false, error: "MenuItemId y cantidad son requeridos para la vista previa." });
+  }
+
+  const menuItems = getMenuItems();
+  const recipes = getRecipes();
+  const recipeIngDb = getRecipeIngredients();
+
+  const item = menuItems.find(m => m.id === menuItemId);
+  if (!item) {
+    return res.status(404).json({ success: false, error: "El plato seleccionado no existe en el menú." });
+  }
+
+  const warnings: string[] = [];
+  const errors: string[] = [];
+
+  if (!item.isActive) {
+    warnings.push("El plato del menú está configurado como INACTIVO.");
+  }
+
+  if (!item.deductsInventory) {
+    warnings.push("El plato del menú está configurado para NO descontar inventario automáticamente.");
+  }
+
+  const recipe = recipes.find(r => r.menuItemId === menuItemId && r.isActive);
+  const qtySold = Number(quantity);
+
+  let recipeIngredients: any[] = [];
+  let hasRecipe = false;
+  let isRecipeIncomplete = false;
+
+  if (recipe) {
+    hasRecipe = true;
+    recipeIngredients = recipeIngDb.filter(ing => ing.recipeId === recipe.id);
+    if (recipeIngredients.length === 0) {
+      isRecipeIncomplete = true;
+      warnings.push("La ficha técnica activa no tiene ingredientes asignados.");
+    }
+  } else {
+    warnings.push("El plato del menú no tiene una ficha técnica activa.");
+  }
+
+  const ingredientsPreview: any[] = [];
+  let theoreticalCostSum = 0;
+
+  if (hasRecipe && !isRecipeIncomplete) {
+    recipeIngredients.forEach(ing => {
+      const deductionQty = ing.quantity * qtySold;
+      const prod = products.find(p => p.id === ing.productId || p.id === ing.portionProductId);
+
+      let stockVal = 0;
+      let resultingStock = 0;
+      let unitCode = "un";
+      let pName = "Insumo Desconectado";
+
+      if (prod) {
+        pName = prod.name;
+        unitCode = prod.unitCode || prod.unitId || "un";
+        if (ing.deductionType === "PORTION" || ing.portionProductId) {
+          stockVal = prod.portionsAvailable || 0;
+        } else {
+          stockVal = prod.areaStocks?.["Cocina"] !== undefined ? prod.areaStocks["Cocina"] : (prod.currentStock || 0);
+        }
+        resultingStock = stockVal - deductionQty;
+
+        const costToAccumulate = ing.costUnit > 0 ? ing.costUnit : (prod.averageCost || 0);
+        const singleCostWithWaste = costToAccumulate * ing.quantity * (1 + (ing.wastePercentage || 0) / 100);
+        theoreticalCostSum += singleCostWithWaste * qtySold;
+      } else {
+        errors.push(`Ingrediente con id ${ing.productId || ing.portionProductId} no está vinculado en el catálogo de inventario.`);
+      }
+
+      ingredientsPreview.push({
+        productId: ing.productId || ing.portionProductId || "unknown",
+        productName: pName,
+        requiredQty: deductionQty,
+        unitCode,
+        currentStock: stockVal,
+        resultingStock,
+        costUnit: ing.costUnit,
+        totalCost: ing.totalCost * qtySold,
+        hasSufficientStock: stockVal >= deductionQty
+      });
+    });
+  } else {
+    const fallbackProd = products.find(p => p.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+    if (fallbackProd) {
+      const stockVal = fallbackProd.areaStocks?.["Cocina"] !== undefined ? fallbackProd.areaStocks["Cocina"] : (fallbackProd.currentStock || 0);
+      const resultingStock = stockVal - qtySold;
+      theoreticalCostSum += (fallbackProd.averageCost || 0) * qtySold;
+
+      ingredientsPreview.push({
+        productId: fallbackProd.id,
+        productName: fallbackProd.name,
+        requiredQty: qtySold,
+        unitCode: fallbackProd.unitCode || fallbackProd.unitId || "un",
+        currentStock: stockVal,
+        resultingStock,
+        costUnit: fallbackProd.averageCost || 0,
+        totalCost: (fallbackProd.averageCost || 0) * qtySold,
+        hasSufficientStock: stockVal >= qtySold
+      });
+    }
+  }
+
+  const unitTheoreticalCost = qtySold > 0 ? (theoreticalCostSum / qtySold) : 0;
+  const salePrice = item.salePrice;
+  const totalAmount = salePrice * qtySold;
+  const marginAmount = totalAmount - theoreticalCostSum;
+  const marginPercentage = totalAmount > 0 ? Math.round((marginAmount / totalAmount) * 100 * 10) / 10 : 0;
+
+  const hasInsufficientStock = ingredientsPreview.some(ing => !ing.hasSufficientStock);
+  if (hasInsufficientStock) {
+    warnings.push("¡Stock insuficiente! Uno o más ingredientes superan las cantidades disponibles.");
+  }
+
+  res.status(200).json({
+    success: true,
+    item: {
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      salePrice: item.salePrice,
+      deductsInventory: item.deductsInventory
+    },
+    quantity: qtySold,
+    hasRecipe,
+    recipeVersion: recipe ? recipe.version : null,
+    ingredients: ingredientsPreview,
+    costPerPlate: Math.round(unitTheoreticalCost * 100) / 100,
+    totalCost: Math.round(theoreticalCostSum * 100) / 100,
+    salePrice,
+    totalRevenue: totalAmount,
+    marginAmount: Math.round(marginAmount * 100) / 100,
+    marginPercentage,
+    warnings,
+    errors
+  });
+});
+
+// 2. MANUAL SALE CONFIRM
+app.post("/api/v1/sales/manual/confirm", (req, res) => {
+  const {
+    menuItemId,
+    quantity,
+    date,
+    time,
+    channel,
+    shift,
+    reference,
+    comment,
+    products = [],
+    userId = "user-anon",
+    userName = "Administrador",
+    insufficientStockPolicy = "B" // A: Block, B: Allow Negative, C: Skip Deduction
+  } = req.body;
+
+  if (!menuItemId || !quantity) {
+    return res.status(400).json({ success: false, error: "MenuItemId y cantidad son requeridos." });
+  }
+
+  const menuItems = getMenuItems();
+  const recipes = getRecipes();
+  const recipeIngDb = getRecipeIngredients();
+
+  const item = menuItems.find(m => m.id === menuItemId);
+  if (!item) {
+    return res.status(404).json({ success: false, error: "El plato comercial de venta no existe." });
+  }
+
+  const qtySold = Number(quantity);
+  const recipe = recipes.find(r => r.menuItemId === menuItemId && r.isActive);
+  const activeProducts = [...products];
+
+  const generatedMovements: any[] = [];
+  const generatedPortionMovements: any[] = [];
+  let theoreticalCostSum = 0;
+  let deductionsApplied = false;
+
+  const dateValue = date || new Date().toISOString().split("T")[0];
+  const refString = reference || "Venta Manual";
+
+  let tempHasInsufficient = false;
+  if (recipe) {
+    const recipeIngredients = recipeIngDb.filter(ing => ing.recipeId === recipe.id);
+    recipeIngredients.forEach(ing => {
+      const deductionQty = ing.quantity * qtySold;
+      const pIdx = activeProducts.findIndex(p => p.id === ing.productId || p.id === ing.portionProductId);
+      if (pIdx !== -1) {
+        const prod = activeProducts[pIdx];
+        const stockVal = (ing.deductionType === "PORTION" || ing.portionProductId)
+          ? (prod.portionsAvailable || 0)
+          : (prod.areaStocks?.["Cocina"] !== undefined ? prod.areaStocks["Cocina"] : (prod.currentStock || 0));
+        if (stockVal < deductionQty) {
+          tempHasInsufficient = true;
+        }
+      }
+    });
+  } else {
+    const fallbackProd = activeProducts.find(p => p.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+    if (fallbackProd) {
+      const stockVal = fallbackProd.areaStocks?.["Cocina"] !== undefined ? fallbackProd.areaStocks["Cocina"] : (fallbackProd.currentStock || 0);
+      if (stockVal < qtySold) {
+        tempHasInsufficient = true;
+      }
+    }
+  }
+
+  if (tempHasInsufficient && insufficientStockPolicy === "A") {
+    return res.status(400).json({
+      success: false,
+      error: "La venta ha sido bloqueada debido a stock insuficiente según las políticas de almacenamiento configuradas."
+    });
+  }
+
+  const executeDeductions = () => {
+    if (recipe && item.deductsInventory) {
+      const recipeIngredients = recipeIngDb.filter(ing => ing.recipeId === recipe.id);
+      if (recipeIngredients.length > 0) {
+        deductionsApplied = true;
+
+        recipeIngredients.forEach(ing => {
+          const deductionQty = ing.quantity * qtySold;
+          const pIdx = activeProducts.findIndex(p => p.id === ing.productId || p.id === ing.portionProductId);
+
+          if (pIdx !== -1) {
+            const prod = activeProducts[pIdx];
+            const costToAccumulate = ing.costUnit > 0 ? ing.costUnit : (prod.averageCost || 0);
+            theoreticalCostSum += costToAccumulate * deductionQty * (1 + (ing.wastePercentage || 0) / 100);
+
+            const stockVal = (ing.deductionType === "PORTION" || ing.portionProductId)
+              ? (prod.portionsAvailable || 0)
+              : (prod.areaStocks?.["Cocina"] !== undefined ? prod.areaStocks["Cocina"] : (prod.currentStock || 0));
+
+            const skipThisDeduction = (stockVal < deductionQty) && (insufficientStockPolicy === "C");
+
+            if (skipThisDeduction) {
+              deductionsApplied = false;
+              return;
+            }
+
+            if (ing.deductionType === "PORTION" || ing.portionProductId) {
+              const prevPortions = prod.portionsAvailable || 0;
+              const newPortions = Math.max(insufficientStockPolicy === "B" ? -999999 : 0, prevPortions - deductionQty);
+              activeProducts[pIdx].portionsAvailable = newPortions;
+
+              generatedPortionMovements.push({
+                id: 'pmov-' + Math.random().toString(36).substr(2, 9),
+                productId: prod.id,
+                movementType: 'PORTION_SALE',
+                quantity: -deductionQty,
+                reason: `Venta Manual: ${item.name} x${qtySold}`,
+                relatedEntityType: 'ManualSale',
+                relatedEntityId: recipe.id,
+                userId,
+                userName,
+                comment: `Código turno: ${shift || 'General'}. Ref: ${refString}`,
+                createdAt: new Date().toISOString()
+              });
+            } else {
+              const prevStock = prod.currentStock;
+              const areaStocks = { ...(prod.areaStocks || {}) };
+              const prevAreaStock = areaStocks["Cocina"] || 0;
+              areaStocks["Cocina"] = Math.max(insufficientStockPolicy === "B" ? -999999 : 0, prevAreaStock - deductionQty);
+              const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+              activeProducts[pIdx].currentStock = newStock;
+              activeProducts[pIdx].areaStocks = areaStocks;
+
+              generatedMovements.push({
+                id: "mov-" + Math.random().toString(36).substr(2, 9),
+                productId: prod.id,
+                productName: prod.name,
+                qty: -deductionQty,
+                unitCode: prod.unitCode || "un",
+                type: "Salida",
+                quantityBefore: prevStock,
+                quantityAfter: newStock,
+                area: "Cocina",
+                userId,
+                userName,
+                date: new Date().toISOString(),
+                reason: `Venta de Plato: ${item.name}`,
+                comment: `Deducido por receta. Unidad: ${prod.unitCode || 'un'}. Ref: ${refString}`
+              });
+            }
+          }
+        });
+      }
+    } else if (item.deductsInventory) {
+      const pIdx = activeProducts.findIndex(p => p.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+      if (pIdx !== -1) {
+        const prod = activeProducts[pIdx];
+        const prevStock = prod.currentStock;
+        const areaStocks = { ...(prod.areaStocks || {}) };
+        const prevAreaStock = areaStocks["Cocina"] || 0;
+
+        const skipThisDeduction = (prevAreaStock < qtySold) && (insufficientStockPolicy === "C");
+
+        if (!skipThisDeduction) {
+          deductionsApplied = true;
+          areaStocks["Cocina"] = Math.max(insufficientStockPolicy === "B" ? -999999 : 0, prevAreaStock - qtySold);
+          const newStock = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+          activeProducts[pIdx].currentStock = newStock;
+          activeProducts[pIdx].areaStocks = areaStocks;
+          theoreticalCostSum += (prod.averageCost || 0) * qtySold;
+
+          generatedMovements.push({
+            id: "mov-" + Math.random().toString(36).substr(2, 9),
+            productId: prod.id,
+            productName: prod.name,
+            qty: -qtySold,
+            unitCode: prod.unitCode || "un",
+            type: "Salida",
+            quantityBefore: prevStock,
+            quantityAfter: newStock,
+            area: "Cocina",
+            userId,
+            userName,
+            date: new Date().toISOString(),
+            reason: `Venta Directa: ${item.name}`,
+            comment: `Sin ficha técnica. Descuento directo. Ref: ${refString}`
+          });
+        }
+      }
+    }
+  };
+
+  executeDeductions();
+
+  const salesDb = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+  const newSaleRecord = {
+    id: "sale-man-" + Math.random().toString(36).substr(2, 9),
+    date: dateValue,
+    saleItemId: item.id,
+    saleItemType: "MENU_ITEM",
+    saleItemName: item.name,
+    qtySold,
+    unitPrice: item.salePrice,
+    totalAmount: item.salePrice * qtySold,
+    theoreticalCost: Math.round(theoreticalCostSum * 100) / 100,
+    marginAmount: Math.round((item.salePrice * qtySold - theoreticalCostSum) * 100) / 100,
+    marginPercentage: item.salePrice > 0 ? Math.round((((item.salePrice * qtySold - theoreticalCostSum) / (item.salePrice * qtySold))) * 100 * 10) / 10 : 0,
+    channel: channel || "RESTAURANT",
+    reference: refString,
+    status: deductionsApplied ? "PROCESSED" : "PENDING_MAPPING",
+    deductionsApplied,
+    createdAt: new Date().toISOString()
+  };
+
+  salesDb.unshift(newSaleRecord);
+  writeJsonFile(DB_PATHS.SALES_RECORDS, salesDb);
+
+  res.status(200).json({
+    success: true,
+    saleRecord: newSaleRecord,
+    updatedProducts: activeProducts,
+    generatedMovements,
+    generatedPortionMovements
+  });
+});
+
+// 3. FILE IMPORT - CONVERT UPLOADED FILE TO COLUMN SCHEMAS & PREProposed MAPS
+app.post("/api/v1/sales/import/upload", (req, res) => {
+  const { fileContent, fileName } = req.body;
+  if (!fileContent || !fileName) {
+    return res.status(400).json({ success: false, error: "Contenido de archivo comprimido y nombre son requeridos." });
+  }
+
+  try {
+    const base64Clean = fileContent.includes("base64,") ? fileContent.split("base64,")[1] : fileContent;
+    const buffer = Buffer.from(base64Clean, "base64");
+
+    const workbook = xlsx.read(buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rawRows = xlsx.utils.sheet_to_json<any>(worksheet);
+
+    if (rawRows.length === 0) {
+      return res.status(400).json({ success: false, error: "El archivo cargado está vacío o no es legible." });
+    }
+
+    const firstRowKeys = Object.keys(rawRows[0] || {});
+    const columns = firstRowKeys.map(k => k.trim());
+
+    const mappings = {
+      saleDate: "",
+      saleItemName: "",
+      qtySold: "",
+      channel: "",
+      reference: "",
+      shift: "",
+      unitPrice: ""
+    };
+
+    columns.forEach(col => {
+      const norm = col.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (["fecha", "date", "day", "fecha_venta"].includes(norm)) {
+        mappings.saleDate = col;
+      } else if (["plato", "item", "product", "menu_item", "nombre", "concepto", "articulo", "descripcion", "producto"].includes(norm)) {
+        mappings.saleItemName = col;
+      } else if (["cantidad", "qty", "quantity", "cant", "unidades", "vendidas"].includes(norm)) {
+        mappings.qtySold = col;
+      } else if (["canal", "channel", "tipo_servicio", "servicio", "via"].includes(norm)) {
+        mappings.channel = col;
+      } else if (["referencia", "reference", "ref", "mesa", "ticket_pos", "ticket", "pedido"].includes(norm)) {
+        mappings.reference = col;
+      } else if (["turno", "shift", "periodo", "horario"].includes(norm)) {
+        mappings.shift = col;
+      } else if (["precio", "price", "precio_venta", "venta", "unitprice"].includes(norm)) {
+        mappings.unitPrice = col;
+      }
+    });
+
+    if (!mappings.saleItemName) {
+      const k = columns.find(c => typeof rawRows[0][c] === "string" && isNaN(Number(rawRows[0][c])));
+      if (k) mappings.saleItemName = k;
+    }
+    if (!mappings.qtySold) {
+      const k = columns.find(c => ["cantidad", "qty", "cant"].some(tok => c.toLowerCase().includes(tok)) || typeof rawRows[0][c] === "number");
+      if (k) mappings.qtySold = k;
+    }
+
+    res.status(200).json({
+      success: true,
+      fileName,
+      columns,
+      suggestedMappings: mappings,
+      rawRows
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `Error procesando el archivo: ${err.message}` });
+  }
+});
+
+// 4. DRY RUN VALIDATION FOR MASS SALES IMPORT
+app.post("/api/v1/sales/import/validate", (req, res) => {
+  const { rawRows = [], mappings = {}, equivalencies = {}, products = [] } = req.body;
+
+  if (rawRows.length === 0) {
+    return res.status(400).json({ success: false, error: "No hay filas para validar." });
+  }
+
+  const menuItems = getMenuItems();
+  const recipes = getRecipes();
+  const recipeIngDb = getRecipeIngredients();
+  const aliases = getMenuAliases();
+  const comboItems = getComboItems();
+  const combos = getCombos();
+  const existingSales = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+
+  const activeProducts = JSON.parse(JSON.stringify(products));
+
+  const validatedLines: any[] = [];
+  const unmatchedNamesMap: Record<string, number> = {};
+  const duplicateChecks = new Set<string>();
+
+  let totalRevenue = 0;
+  let totalTheoreticalCost = 0;
+  let totalQtySold = 0;
+
+  const ingredientRequirements: Record<string, {
+    productId: string;
+    name: string;
+    requiredQty: number;
+    unitCode: string;
+    isPortion: boolean;
+    currentStock: number;
+  }> = {};
+
+  rawRows.forEach((row: any, index: number) => {
+    let dateStr = new Date().toISOString().split("T")[0];
+    let rawItemName = "";
+    let quantity = 1;
+    let channel = "RESTAURANTE";
+    let reference = `Fila ${index + 1}`;
+    let shift = "Turno completo";
+    let price = 0;
+
+    if (mappings.saleDate && row[mappings.saleDate] !== undefined) {
+      if (typeof row[mappings.saleDate] === "number") {
+        const dateObj = new Date((row[mappings.saleDate] - 25569) * 86400 * 1000);
+        dateStr = dateObj.toISOString().split("T")[0];
+      } else {
+        dateStr = String(row[mappings.saleDate]).trim();
+      }
+    }
+    if (mappings.saleItemName && row[mappings.saleItemName] !== undefined) {
+      rawItemName = String(row[mappings.saleItemName]).trim();
+    }
+    if (mappings.qtySold && row[mappings.qtySold] !== undefined) {
+      quantity = Number(row[mappings.qtySold]) || 1;
+    }
+    if (mappings.channel && row[mappings.channel] !== undefined) {
+      channel = String(row[mappings.channel]).trim().toUpperCase();
+    }
+    if (mappings.reference && row[mappings.reference] !== undefined) {
+      reference = String(row[mappings.reference]).trim();
+    }
+    if (mappings.shift && row[mappings.shift] !== undefined) {
+      shift = String(row[mappings.shift]).trim();
+    }
+    if (mappings.unitPrice && row[mappings.unitPrice] !== undefined) {
+      price = Number(row[mappings.unitPrice]) || 0;
+    }
+
+    if (!rawItemName) return;
+
+    totalQtySold += quantity;
+
+    let matchedMenuItem: any = null;
+    let matchedCombo: any = null;
+    let matchType: "MENU_ITEM" | "COMBO" | "UNKNOWN" = "UNKNOWN";
+
+    const cleanName = rawItemName.toLowerCase();
+
+    if (equivalencies[rawItemName]) {
+      const found = menuItems.find(i => i.id === equivalencies[rawItemName]);
+      if (found) {
+        matchedMenuItem = found;
+        matchType = "MENU_ITEM";
+      }
+    } else if (equivalencies[cleanName]) {
+      const found = menuItems.find(i => i.id === equivalencies[cleanName]);
+      if (found) {
+        matchedMenuItem = found;
+        matchType = "MENU_ITEM";
+      }
+    }
+
+    if (!matchedMenuItem) {
+      matchedMenuItem = menuItems.find(i => i.name.toLowerCase() === cleanName);
+      if (matchedMenuItem) {
+        matchType = "MENU_ITEM";
+      }
+    }
+
+    if (!matchedMenuItem) {
+      const alias = aliases.find(a => a.rawSalesName.toLowerCase() === cleanName);
+      if (alias) {
+        matchedMenuItem = menuItems.find(i => i.id === alias.menuItemId);
+        if (matchedMenuItem) matchType = "MENU_ITEM";
+      }
+    }
+
+    if (!matchedMenuItem) {
+      matchedCombo = combos.find(c => c.name.toLowerCase() === cleanName);
+      if (matchedCombo) {
+        matchType = "COMBO";
+      }
+    }
+
+    let suggestion: any = null;
+    if (!matchedMenuItem && !matchedCombo) {
+      let bScore = 0;
+      menuItems.forEach(i => {
+        const sc = computeSimilarity(i.name, rawItemName);
+        if (sc > bScore) {
+          bScore = sc;
+          suggestion = i;
+        }
+      });
+      if (bScore >= 75 && suggestion) {
+        matchedMenuItem = suggestion;
+        matchType = "MENU_ITEM";
+      }
+    }
+
+    let status: "VALID" | "WARNING" | "ERROR" = "VALID";
+    let errorMessage = "";
+    let obs = "";
+
+    if (!matchedMenuItem && !matchedCombo) {
+      status = "ERROR";
+      errorMessage = "Plato no encontrado en el menú.";
+      unmatchedNamesMap[rawItemName] = (unmatchedNamesMap[rawItemName] || 0) + quantity;
+    } else {
+      const targetItem = matchedMenuItem || matchedCombo;
+      if (!targetItem.isActive) {
+        status = "WARNING";
+        obs = "El plato se encuentra inactivo.";
+      }
+      if (matchType === "MENU_ITEM" && !targetItem.deductsInventory) {
+        status = "WARNING";
+        obs = "Configurado para NO descontar inventarios.";
+      }
+
+      if (matchType === "MENU_ITEM" && targetItem.requiresRecipe) {
+        const recipe = recipes.find(r => r.menuItemId === targetItem.id && r.isActive);
+        if (!recipe) {
+          status = "WARNING";
+          obs = "Plato sin ficha técnica activa.";
+        } else {
+          const ingList = recipeIngDb.filter(ing => ing.recipeId === recipe.id);
+          if (ingList.length === 0) {
+            status = "WARNING";
+            obs = "Ficha técnica vacía o incompleta.";
+          }
+        }
+      }
+    }
+
+    const dupKey = `${dateStr}-${rawItemName}-${quantity}-${channel}-${reference}`;
+    const isLocalDuplicate = duplicateChecks.has(dupKey);
+    duplicateChecks.add(dupKey);
+
+    const isDbDuplicate = existingSales.some(s =>
+      s.date === dateStr &&
+      s.saleItemName.toLowerCase() === rawItemName.toLowerCase() &&
+      s.qtySold === quantity &&
+      s.channel === channel &&
+      s.reference === reference
+    );
+
+    let isDuplicate = isLocalDuplicate || isDbDuplicate;
+    if (isDuplicate && status !== "ERROR") {
+      status = "WARNING";
+      obs = isDbDuplicate ? "Venta importada previamente." : "Fila repetida en archivo.";
+    }
+
+    const salePrice = matchedMenuItem ? matchedMenuItem.salePrice : (matchedCombo ? matchedCombo.salePrice : price);
+    const rowTotal = salePrice * quantity;
+    totalRevenue += rowTotal;
+
+    let calculatedCost = 0;
+
+    const processItemDeduction = (mId: string, mul: number) => {
+      const activeRec = recipes.find(r => r.menuItemId === mId && r.isActive);
+      if (activeRec) {
+        const ingredients = recipeIngDb.filter(ing => ing.recipeId === activeRec.id);
+        ingredients.forEach(ing => {
+          const deductionQty = ing.quantity * mul;
+          const targetProdId = ing.productId || ing.portionProductId;
+          if (!targetProdId) return;
+
+          const prod = activeProducts.find(p => p.id === targetProdId);
+          if (prod) {
+            const costUnit = ing.costUnit > 0 ? ing.costUnit : (prod.averageCost || 0);
+            calculatedCost += costUnit * deductionQty * (1 + (ing.wastePercentage || 0) / 100);
+
+            let isPortion = !!(ing.deductionType === "PORTION" || ing.portionProductId);
+
+            if (!ingredientRequirements[targetProdId]) {
+              const stockVal = isPortion
+                ? (prod.portionsAvailable || 0)
+                : (prod.areaStocks?.["Cocina"] !== undefined ? prod.areaStocks["Cocina"] : (prod.currentStock || 0));
+
+              ingredientRequirements[targetProdId] = {
+                productId: targetProdId,
+                name: prod.name,
+                requiredQty: 0,
+                unitCode: prod.unitCode || prod.unitId || "un",
+                isPortion,
+                currentStock: stockVal
+              };
+            }
+            ingredientRequirements[targetProdId].requiredQty += deductionQty;
+          }
+        });
+      } else {
+        const fallbackProd = activeProducts.find(p => p.name.toLowerCase() === rawItemName.toLowerCase());
+        if (fallbackProd) {
+          calculatedCost += (fallbackProd.averageCost || 0) * mul;
+          if (!ingredientRequirements[fallbackProd.id]) {
+            const stockVal = fallbackProd.areaStocks?.["Cocina"] !== undefined ? fallbackProd.areaStocks["Cocina"] : (fallbackProd.currentStock || 0);
+            ingredientRequirements[fallbackProd.id] = {
+              productId: fallbackProd.id,
+              name: fallbackProd.name,
+              requiredQty: 0,
+              unitCode: fallbackProd.unitCode || fallbackProd.unitId || "un",
+              isPortion: false,
+              currentStock: stockVal
+            };
+          }
+          ingredientRequirements[fallbackProd.id].requiredQty += mul;
+        }
+      }
+    };
+
+    if (matchType === "MENU_ITEM" && matchedMenuItem && matchedMenuItem.deductsInventory) {
+      processItemDeduction(matchedMenuItem.id, quantity);
+    } else if (matchType === "COMBO" && matchedCombo) {
+      const itemsOfCombo = comboItems.filter(ci => ci.comboId === matchedCombo.id);
+      itemsOfCombo.forEach(ci => {
+        processItemDeduction(ci.menuItemId, ci.quantity * quantity);
+      });
+    }
+
+    totalTheoreticalCost += calculatedCost;
+
+    validatedLines.push({
+      index,
+      saleDate: dateStr,
+      rawItemName,
+      matchedMenuItemId: matchedMenuItem ? matchedMenuItem.id : (matchedCombo ? matchedCombo.id : null),
+      matchedItemName: matchedMenuItem ? matchedMenuItem.name : (matchedCombo ? matchedCombo.name : null),
+      matchType,
+      quantity,
+      price: salePrice,
+      total: rowTotal,
+      channel,
+      reference,
+      shift,
+      status,
+      isDuplicate,
+      errorMessage,
+      observation: obs
+    });
+  });
+
+  const ingredientsOutput = Object.values(ingredientRequirements).map(req => {
+    const resultingStock = req.currentStock - req.requiredQty;
+    return {
+      ...req,
+      resultingStock,
+      hasSufficientStock: resultingStock >= 0
+    };
+  });
+
+  const totals = {
+    totalRows: validatedLines.length,
+    validRows: validatedLines.filter(l => l.status === "VALID").length,
+    warningRows: validatedLines.filter(l => l.status === "WARNING").length,
+    errorRows: validatedLines.filter(l => l.status === "ERROR").length,
+    totalQtySold,
+    totalRevenue,
+    totalTheoreticalCost: Math.round(totalTheoreticalCost * 100) / 100,
+    marginAmount: Math.round((totalRevenue - totalTheoreticalCost) * 100) / 100,
+    marginPercentage: totalRevenue > 0 ? Math.round(((totalRevenue - totalTheoreticalCost) / totalRevenue) * 100 * 10) / 10 : 0
+  };
+
+  res.status(200).json({
+    success: true,
+    totals,
+    validatedLines,
+    unmatchedNames: Object.keys(unmatchedNamesMap).map(name => ({ rawSalesName: name, occurrences: unmatchedNamesMap[name] })),
+    ingredientsToDeduct: ingredientsOutput
+  });
+});
+
+// 5. SECURELY COMMIT MASS IMPORT SALES DEDUCTIONS TO DISK
+app.post("/api/v1/sales/import/confirm", (req, res) => {
+  const {
+    validatedLines = [],
+    policy = "B", // A: Block, B: Allow Negative, C: Leave Pending
+    fileName = "importacion_masiva.xlsx",
+    userId = "user-anon",
+    userName = "Administrador",
+    products = []
+  } = req.body;
+
+  if (validatedLines.length === 0) {
+    return res.status(400).json({ success: false, error: "No hay filas procesables para confirmar la importación." });
+  }
+
+  const salesDb = readJsonFile<any[]>(DB_PATHS.SALES_RECORDS, []);
+  const importsDb = readJsonFile<any[]>(DB_PATHS.SALES_IMPORTS, []);
+  const importLinesDb = readJsonFile<any[]>(DB_PATHS.SALES_IMPORT_LINES, []);
+
+  const menuItems = getMenuItems();
+  const recipes = getRecipes();
+  const recipeIngDb = getRecipeIngredients();
+  const comboItems = getComboItems();
+  const activeProducts = [...products];
+
+  const generatedMovements: any[] = [];
+  const generatedPortionMovements: any[] = [];
+
+  const importId = "import-" + Math.random().toString(36).substr(2, 9);
+  let importedRows = 0;
+  let skippedRows = 0;
+  let totalCostSum = 0;
+  let totalRevenueSum = 0;
+
+  const aliases = getMenuAliases();
+
+  validatedLines.forEach((line: any) => {
+    if (line.status === "ERROR") {
+      skippedRows++;
+      importLinesDb.push({
+        id: "line-" + Math.random().toString(36).substr(2, 9),
+        salesImportId: importId,
+        rowNumber: line.index + 1,
+        saleDate: line.saleDate,
+        rawItemName: line.rawItemName,
+        matchedMenuItemId: null,
+        quantity: line.quantity,
+        channel: line.channel,
+        shift: line.shift,
+        reference: line.reference,
+        status: "ERROR",
+        errorMessage: line.errorMessage || "Relacionamiento fallido"
+      });
+      return;
+    }
+
+    const qtySold = Number(line.quantity);
+    let lineTheoreticalCost = 0;
+    let deductionsApplied = false;
+
+    const processIngredientDeduction = (mId: string, mul: number) => {
+      const activeRec = recipes.find(r => r.menuItemId === mId && r.isActive);
+      if (activeRec) {
+        const ingredients = recipeIngDb.filter(ing => ing.recipeId === activeRec.id);
+        if (ingredients.length > 0) {
+          deductionsApplied = true;
+
+          ingredients.forEach(ing => {
+            const deductionQty = ing.quantity * mul;
+            const targetProdId = ing.productId || ing.portionProductId;
+            if (!targetProdId) return;
+
+            const pIdx = activeProducts.findIndex(p => p.id === targetProdId);
+            if (pIdx !== -1) {
+              const prod = activeProducts[pIdx];
+              const costToAccumulate = ing.costUnit > 0 ? ing.costUnit : (prod.averageCost || 0);
+              lineTheoreticalCost += costToAccumulate * deductionQty * (1 + (ing.wastePercentage || 0) / 100);
+
+              const isPortion = !!(ing.deductionType === "PORTION" || ing.portionProductId);
+              const currentStock = isPortion ? (prod.portionsAvailable || 0) : (prod.areaStocks?.["Cocina"] !== undefined ? prod.areaStocks["Cocina"] : (prod.currentStock || 0));
+
+              const skipThisIng = (currentStock < deductionQty) && (policy === "C");
+              if (skipThisIng) {
+                deductionsApplied = false;
+                return;
+              }
+
+              if (isPortion) {
+                const prev = prod.portionsAvailable || 0;
+                const nextVal = Math.max(policy === "B" ? -999999 : 0, prev - deductionQty);
+                activeProducts[pIdx].portionsAvailable = nextVal;
+
+                generatedPortionMovements.push({
+                  id: "pmov-" + Math.random().toString(36).substr(2, 9),
+                  productId: prod.id,
+                  movementType: "PORTION_SALE",
+                  quantity: -deductionQty,
+                  reason: `Carga Ventas: ${line.rawItemName} x${qtySold}`,
+                  relatedEntityType: "SalesImport",
+                  relatedEntityId: importId,
+                  userId,
+                  userName,
+                  comment: `Archivo: ${fileName}. Canal: ${line.channel}`,
+                  createdAt: new Date().toISOString()
+                });
+              } else {
+                const prevStock = prod.currentStock;
+                const areaStocks = { ...(prod.areaStocks || {}) };
+                const prevAreaStock = areaStocks["Cocina"] || 0;
+                areaStocks["Cocina"] = Math.max(policy === "B" ? -999999 : 0, prevAreaStock - deductionQty);
+                const nextVal = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+                activeProducts[pIdx].currentStock = nextVal;
+                activeProducts[pIdx].areaStocks = areaStocks;
+
+                generatedMovements.push({
+                  id: "mov-" + Math.random().toString(36).substr(2, 9),
+                  productId: prod.id,
+                  productName: prod.name,
+                  qty: -deductionQty,
+                  unitCode: prod.unitCode || "un",
+                  type: "Salida",
+                  quantityBefore: prevStock,
+                  quantityAfter: nextVal,
+                  area: "Cocina",
+                  userId,
+                  userName,
+                  date: new Date().toISOString(),
+                  reason: `Carga Ventas: ${line.rawItemName}`,
+                  comment: `Lote importado de ${fileName}. Ref: ${line.reference}`
+                });
+              }
+            }
+          });
+        }
+      } else {
+        const pIdx = activeProducts.findIndex(p => p.name.toLowerCase() === line.rawItemName.toLowerCase());
+        if (pIdx !== -1) {
+          const prod = activeProducts[pIdx];
+          const prevStock = prod.currentStock;
+          const areaStocks = { ...(prod.areaStocks || {}) };
+          const prevAreaStock = areaStocks["Cocina"] || 0;
+
+          const skipThisIng = (prevAreaStock < qtySold) && (policy === "C");
+          if (!skipThisIng) {
+            deductionsApplied = true;
+            areaStocks["Cocina"] = Math.max(policy === "B" ? -999999 : 0, prevAreaStock - qtySold);
+            const nextVal = Object.values(areaStocks).reduce((a: number, b: any) => a + b, 0);
+
+            activeProducts[pIdx].currentStock = nextVal;
+            activeProducts[pIdx].areaStocks = areaStocks;
+            lineTheoreticalCost += (prod.averageCost || 0) * qtySold;
+
+            generatedMovements.push({
+              id: "mov-" + Math.random().toString(36).substr(2, 9),
+              productId: prod.id,
+              productName: prod.name,
+              qty: -qtySold,
+              unitCode: prod.unitCode || "un",
+              type: "Salida",
+              quantityBefore: prevStock,
+              quantityAfter: nextVal,
+              area: "Cocina",
+              userId,
+              userName,
+              date: new Date().toISOString(),
+              reason: `Venta Directa: ${line.rawItemName}`,
+              comment: `Lote importado de ${fileName}. Ref: ${line.reference}`
+            });
+          }
+        }
+      }
+    };
+
+    if (line.matchType === "MENU_ITEM" && line.matchedMenuItemId) {
+      processIngredientDeduction(line.matchedMenuItemId, qtySold);
+    } else if (line.matchType === "COMBO" && line.matchedMenuItemId) {
+      const itemsOfCombo = comboItems.filter(ci => ci.comboId === line.matchedMenuItemId);
+      itemsOfCombo.forEach(ci => {
+        processIngredientDeduction(ci.menuItemId, ci.quantity * qtySold);
+      });
+    }
+
+    totalCostSum += lineTheoreticalCost;
+    totalRevenueSum += line.total;
+    importedRows++;
+
+    const newSaleRecord = {
+      id: "sale-imp-row-" + Math.random().toString(36).substr(2, 9),
+      date: line.saleDate,
+      saleItemId: line.matchedMenuItemId || null,
+      saleItemType: line.matchType === "COMBO" ? "COMBO" : "MENU_ITEM",
+      saleItemName: line.matchedItemName || line.rawItemName,
+      qtySold,
+      unitPrice: line.price,
+      totalAmount: line.total,
+      theoreticalCost: Math.round(lineTheoreticalCost * 100) / 100,
+      marginAmount: Math.round((line.total - lineTheoreticalCost) * 100) / 100,
+      marginPercentage: line.total > 0 ? Math.round(((line.total - lineTheoreticalCost) / line.total) * 100 * 10) / 10 : 0,
+      channel: line.channel || "RESTAURANT",
+      reference: line.reference || `Archivo ${fileName}`,
+      status: deductionsApplied ? "PROCESSED" : "PENDING_MAPPING",
+      deductionsApplied,
+      createdAt: new Date().toISOString()
+    };
+
+    salesDb.unshift(newSaleRecord);
+
+    importLinesDb.push({
+      id: "line-" + Math.random().toString(36).substr(2, 9),
+      salesImportId: importId,
+      rowNumber: line.index + 1,
+      saleDate: line.saleDate,
+      rawItemName: line.rawItemName,
+      matchedMenuItemId: line.matchedMenuItemId,
+      quantity: qtySold,
+      channel: line.channel,
+      shift: line.shift,
+      reference: line.reference,
+      status: line.status === "VALID" ? "IMPORTED" : "WARNING",
+      errorMessage: line.observation || "Importación exitosa"
+    });
+
+    if (line.matchedMenuItemId && line.rawItemName.toLowerCase() !== (line.matchedItemName || "").toLowerCase()) {
+      const aliasExists = aliases.some(a => a.rawSalesName.toLowerCase().trim() === line.rawItemName.toLowerCase().trim());
+      if (!aliasExists) {
+        aliases.push({
+          id: "alias-menu-" + Math.random().toString(36).substr(2, 9),
+          rawSalesName: line.rawItemName,
+          menuItemId: line.matchedMenuItemId,
+          source: "CSV_IMPORT",
+          confidenceScore: 90,
+          timesConfirmed: 1,
+          lastConfirmedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+  });
+
+  const importSummary = {
+    id: importId,
+    fileName,
+    fileType: fileName.endsWith(".xlsx") ? "EXCEL" : "CSV",
+    status: skippedRows === 0 ? "IMPORTED" : "PARTIALLY_IMPORTED",
+    selectedDate: validatedLines[0]?.saleDate || new Date().toISOString().split("T")[0],
+    totalRows: validatedLines.length,
+    validRows: validatedLines.filter((l: any) => l.status === "VALID").length,
+    errorRows: skippedRows,
+    warningRows: validatedLines.filter((l: any) => l.status === "WARNING").length,
+    importedRows,
+    skippedRows,
+    totalRevenue: totalRevenueSum,
+    uploadedByUserId: userId,
+    createdAt: new Date().toISOString(),
+    confirmedAt: new Date().toISOString()
+  };
+
+  importsDb.unshift(importSummary);
+
+  writeJsonFile(DB_PATHS.SALES_RECORDS, salesDb);
+  writeJsonFile(DB_PATHS.SALES_IMPORTS, importsDb);
+  writeJsonFile(DB_PATHS.SALES_IMPORT_LINES, importLinesDb);
+  writeJsonFile(DB_PATHS.MENU_ALIASES, aliases);
+
+  res.status(201).json({
+    success: true,
+    importSummary,
+    updatedProducts: activeProducts,
+    generatedMovements,
+    generatedPortionMovements
+  });
+});
+
+// 6. HISTORY OF ENTIRE IMPORTS
+app.get("/api/v1/sales/import/history", (req, res) => {
+  res.status(200).json({ success: true, history: getSalesImports() });
+});
+
+app.get("/api/v1/sales/import/:id/errors", (req, res) => {
+  const lines = getSalesImportLines();
+  const errors = lines.filter(l => l.salesImportId === req.params.id && (l.status === "ERROR" || l.status === "WARNING"));
+  res.status(200).json({ success: true, errors });
+});
 
 
 // --- PROCESS SALES TICKETS OUTLET ---
