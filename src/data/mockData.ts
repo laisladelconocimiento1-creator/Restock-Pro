@@ -798,8 +798,16 @@ export const mockConfig: RestaurantConfig = {
   address: 'Santo Domingo, República Dominicana',
   phone: '809 123 4567',
   email: 'administracion@elcellergourmet.com',
-  taxRate: 18, // ITBIS estándar en RD
+  taxRate: 18, 
   currencySymbol: 'RD$',
-  allowedDomain: 'cellergourmet.com'
+  allowedDomain: 'cellergourmet.com',
+  companyName: '', // empty to trigger CONFIGURACIÓN_INCOMPLETA conditions
+  branches: [],
+  areas: [],
+  currency: 'RD$',
+  timezone: 'GMT-5',
+  dateFormat: 'DD/MM/YYYY',
+  isConfigComplete: false,
+  initialInventoryConfirmed: false
 };
 

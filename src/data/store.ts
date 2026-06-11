@@ -99,7 +99,7 @@ function setLocalStorageItem<T>(key: string, value: T): void {
 
 // Check if initialized
 export function initializeStore(forceReset = false) {
-  const versionKey = 'restock_pro_clean_v6_basepreps';
+  const versionKey = 'restock_pro_clean_v7_final_conf';
   const hasBeenCleaned = localStorage.getItem(versionKey);
 
   if (forceReset || !hasBeenCleaned) {

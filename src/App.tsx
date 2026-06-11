@@ -14,7 +14,8 @@ import {
   User,
   Role,
   MovementType,
-  InventoryArea
+  InventoryArea,
+  KitchenDailyClose
 } from './types';
 
 // Importing views split modules
@@ -35,6 +36,7 @@ import LoginView from './components/LoginView';
 import PortionManagementView from './components/PortionManagementView';
 import InventoryImportView from './components/InventoryImportView';
 import MenuAndRecipesView from './components/MenuAndRecipesView';
+import InitialSetupWizard from './components/InitialSetupWizard';
 
 export default function App() {
   // Initialize general LocalStorage structures on construct
@@ -52,6 +54,7 @@ export default function App() {
     setAuditLogs(store.getAuditLogs());
     setPhysicalSessions(store.getPhysicalSessions());
     setConfig(store.getConfig());
+    setDailyCloses(store.getDailyCloses());
   }, []);
 
   // System Core States
@@ -66,6 +69,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [physicalSessions, setPhysicalSessions] = useState<PhysicalSession[]>([]);
   const [config, setConfig] = useState<RestaurantConfig | null>(null);
+  const [dailyCloses, setDailyCloses] = useState<KitchenDailyClose[]>([]);
 
   // Active module navigation
   const [activeModule, setActiveModule] = useState<string>('Dashboard');
@@ -86,6 +90,7 @@ export default function App() {
     setPhysicalSessions(store.getPhysicalSessions());
     const latestConf = store.getConfig();
     if (latestConf) setConfig(latestConf);
+    setDailyCloses(store.getDailyCloses());
   };
 
   // Switch authenticated roles on debug switch matrix
@@ -238,6 +243,17 @@ export default function App() {
     return <LoginView onLoginCompleted={handleLoginCompleted} />;
   }
 
+  // If system configuration is incomplete, force the wizard setup view
+  if (config && config.isConfigComplete === false) {
+    return (
+      <InitialSetupWizard 
+        onSetupComplete={(finalConfig) => {
+          handleUpdateConfig(finalConfig);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-800 flex flex-col md:flex-row overflow-x-hidden" id="main-app-container">
       {/* Sidebar navigation */}
@@ -276,6 +292,7 @@ export default function App() {
               requests={kitchenRequests}
               movements={movements}
               physicalSessions={physicalSessions}
+              dailyCloses={dailyCloses}
               onNavigate={setActiveModule}
               onQuickAction={() => {}}
             />
@@ -347,6 +364,8 @@ export default function App() {
               providers={providers}
               categories={categories}
               currentUserRole={currentUser.role}
+              products={products}
+              purchases={purchases}
               onAddProvider={handleAddProvider}
               onUpdateProvider={handleUpdateProvider}
             />
@@ -386,6 +405,17 @@ export default function App() {
               currentUserRole={currentUser.role}
               onUpdateConfig={handleUpdateConfig}
               onSystemReset={reloadAllDataFromStore}
+            />
+          )}
+
+          {activeModule === 'Importar' && (
+            <InventoryImportView
+              products={products}
+              categories={categories}
+              units={units}
+              providers={providers}
+              currentUser={currentUser}
+              onReloadAllData={reloadAllDataFromStore}
             />
           )}
 

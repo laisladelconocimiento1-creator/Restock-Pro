@@ -12,12 +12,14 @@ import {
   Sparkles,
   ClipboardList
 } from 'lucide-react';
-import { Provider, Category, Role } from '../types';
+import { Provider, Category, Role, Product, Purchase } from '../types';
 
 interface ProvidersProps {
   providers: Provider[];
   categories: Category[];
   currentUserRole: Role;
+  products?: Product[];
+  purchases?: Purchase[];
   onAddProvider: (p: Provider) => void;
   onUpdateProvider: (p: Provider) => void;
 }
@@ -26,6 +28,8 @@ export default function ProvidersView({
   providers,
   categories,
   currentUserRole,
+  products = [],
+  purchases = [],
   onAddProvider,
   onUpdateProvider
 }: ProvidersProps) {
@@ -45,6 +49,10 @@ export default function ProvidersView({
   const [address, setAddress] = useState('');
   const [rating, setRating] = useState<number>(5);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [paymentTerm, setPaymentTerm] = useState('Efectivo');
+  const [isActive, setIsActive] = useState(true);
+  const [corporateName, setCorporateName] = useState('');
+  const [selectedDetailsProvider, setSelectedDetailsProvider] = useState<string | null>(null);
 
   const isComprasOrHigher = ['ADMIN', 'COMPRAS', 'GERENTE'].includes(currentUserRole);
 
@@ -69,7 +77,10 @@ export default function ProvidersView({
       setEmail(prov.email);
       setAddress(prov.address);
       setRating(prov.rating);
-      setSelectedCategories(prov.categories);
+      setSelectedCategories(prov.categories || []);
+      setPaymentTerm(prov.paymentTerm || 'Efectivo');
+      setIsActive(prov.isActive !== false);
+      setCorporateName(prov.corporateName || prov.name);
     } else {
       setEditingProvider(null);
       setName('');
@@ -80,6 +91,9 @@ export default function ProvidersView({
       setAddress('');
       setRating(5);
       setSelectedCategories([]);
+      setPaymentTerm('Efectivo');
+      setIsActive(true);
+      setCorporateName('');
     }
     setIsModalOpen(true);
   };
@@ -91,31 +105,26 @@ export default function ProvidersView({
       return;
     }
 
+    const payload: Provider = {
+      id: editingProvider ? editingProvider.id : 'prov-' + Math.random().toString(36).substr(2, 9),
+      name,
+      rfc,
+      contactName,
+      phone,
+      email,
+      address,
+      rating,
+      categories: selectedCategories,
+      paymentTerm,
+      isActive,
+      corporateName: corporateName.trim() || name
+    };
+
     if (editingProvider) {
-      onUpdateProvider({
-        ...editingProvider,
-        name,
-        rfc,
-        contactName,
-        phone,
-        email,
-        address,
-        rating,
-        categories: selectedCategories
-      });
+      onUpdateProvider(payload);
       alert('Información del proveedor actualizada.');
     } else {
-      onAddProvider({
-        id: 'prov-' + Math.random().toString(36).substr(2, 9),
-        name,
-        rfc,
-        contactName,
-        phone,
-        email,
-        address,
-        rating,
-        categories: selectedCategories
-      });
+      onAddProvider(payload);
       alert('Se registró el nuevo proveedor con éxito.');
     }
     setIsModalOpen(false);
@@ -185,22 +194,37 @@ export default function ProvidersView({
                     <Truck className="w-5 h-5" />
                   </div>
 
-                  {/* Stars visual render */}
-                  <div className="flex gap-0.5 text-amber-400">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <Star
-                        key={index}
-                        className={`w-3.5 h-3.5 ${index < p.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`}
-                      />
-                    ))}
+                  {/* Rating select */}
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex gap-0.5 text-amber-400">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <Star
+                          key={index}
+                          className={`w-3.5 h-3.5 ${index < p.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`}
+                        />
+                      ))}
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider ${
+                      p.isActive !== false ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+                    }`}>
+                      {p.isActive !== false ? 'ACTIVO' : 'PASIVO'}
+                    </span>
                   </div>
                 </div>
 
                 <div>
                   <h3 className="font-display font-extrabold text-base text-slate-800 line-clamp-1 leading-snug">{p.name}</h3>
-                  <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 py-0.5 px-2 rounded-full mt-1.5 inline-block">
-                    RFC: {p.rfc}
-                  </span>
+                  {p.corporateName && p.corporateName !== p.name && (
+                    <span className="block text-[10px] text-slate-500 font-medium">Razón Social: {p.corporateName}</span>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 py-0.5 px-2 rounded-full">
+                      RFC: {p.rfc}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                      Condición: {p.paymentTerm || 'Efectivo'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -223,28 +247,85 @@ export default function ProvidersView({
               </div>
 
               {/* Bottom tag items */}
-              <div className="flex items-center justify-between">
-                {/* Associated categories badges */}
-                <div className="flex flex-wrap gap-1 leading-none">
-                  {p.categories.map(catId => {
-                    const matchedCat = categories.find(c => c.id === catId);
-                    return (
-                      <span key={catId} className="px-2 py-1 border border-slate-200 rounded text-[9px] uppercase font-bold text-slate-500 bg-slate-50">
-                        {matchedCat ? matchedCat.name.split(' ')[0] : 'Suministros'}
-                      </span>
-                    );
-                  })}
+              <div className="flex flex-col gap-3 pt-1">
+                {/* Associated Categories & buttons */}
+                <div className="flex items-center justify-between border-t border-slate-50 pt-3">
+                  <div className="flex flex-wrap gap-1 leading-none">
+                    {p.categories.map(catId => {
+                      const matchedCat = categories.find(c => c.id === catId);
+                      return (
+                        <span key={catId} className="px-2 py-1 border border-slate-200 rounded text-[9px] uppercase font-bold text-slate-500 bg-slate-50">
+                          {matchedCat ? matchedCat.name.split(' ')[0] : 'Suministros'}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      onClick={() => setSelectedDetailsProvider(selectedDetailsProvider === p.id ? null : p.id)}
+                      className="px-2 py-1 border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded text-[10px] font-bold"
+                    >
+                      {selectedDetailsProvider === p.id ? 'Ocultar Ficha' : 'Ver Ficha / Precios'}
+                    </button>
+                    {isComprasOrHigher && (
+                      <button
+                        onClick={() => handleOpenModal(p)}
+                        className="p-1.5 bg-slate-50 hover:bg-slate-150 border border-slate-200 text-slate-500 rounded-lg hover:text-slate-800 transition"
+                        title="Editar Proveedor"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Edit Button */}
-                {isComprasOrHigher && (
-                  <button
-                    onClick={() => handleOpenModal(p)}
-                    className="p-1.5 bg-slate-50 hover:bg-slate-150 border border-slate-200 text-slate-500 rounded-lg hover:text-slate-800 transition"
-                    title="Editar Proveedor"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                {/* HISTORIC PRICES AND ASSOCIATED PRODUCTS TAB (LIVE) */}
+                {selectedDetailsProvider === p.id && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3.5 animate-fade-in text-[11px] font-sans">
+                    {/* INSUMOS ASOCIADOS */}
+                    <div>
+                      <h4 className="font-bold text-slate-700 uppercase text-[9px] mb-1">Insumos Asociados en Catálogo</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {products.filter(item => item.providerIds?.includes(p.id)).map(prod => (
+                          <span key={prod.id} className="bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded text-[10px] font-medium flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                            {prod.name}
+                          </span>
+                        ))}
+                        {products.filter(item => item.providerIds?.includes(p.id)).length === 0 && (
+                          <span className="text-[10px] text-slate-400 font-mono">Ningún artículo de catálogo tiene asignado este proveedor.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* HISTORIAL DE PRECIO DE COMPRAS */}
+                    <div>
+                      <h4 className="font-bold text-slate-700 uppercase text-[9px] mb-1">Precios Pagados en Compras</h4>
+                      <div className="max-h-28 overflow-y-auto space-y-1 pr-1 border border-slate-200/50 rounded-lg p-1 bg-white">
+                        {purchases.filter(pu => pu.providerId === p.id).length === 0 ? (
+                          <p className="text-[10px] text-slate-400 font-mono p-1">No hay tickets de compras registrados con este proveedor.</p>
+                        ) : (
+                          purchases.filter(pu => pu.providerId === p.id).flatMap(pu => 
+                            pu.items.map((it, iIdx) => {
+                              const foundProd = products.find(prod => prod.id === it.productId);
+                              return (
+                                <div key={`${pu.id}-${iIdx}`} className="flex justify-between items-center p-1.5 hover:bg-slate-50 rounded border-b border-slate-50 last:border-b-0 space-y-0.5">
+                                  <div>
+                                    <strong className="block text-slate-800 text-[10px]">{foundProd ? foundProd.name : 'Insumo'}</strong>
+                                    <span className="text-[9px] text-slate-400 font-mono">Fac/Cod: {pu.invoiceNumber || pu.code} • {new Date(pu.date).toLocaleDateString()}</span>
+                                  </div>
+                                  <span className="font-mono text-emerald-700 font-bold">
+                                    RD$ {it.unitPrice.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -268,34 +349,61 @@ export default function ProvidersView({
             <form onSubmit={handleSaveSubmit} className="p-6 space-y-4 font-sans text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Provider Name */}
-                <div className="sm:col-span-2">
-                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Razón Social / Nombre Comercial *</label>
+                <div>
+                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Nombre Comercial *</label>
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Ej. Distribuidora Cárnicas SA de CV, Agrícola del Valle..."
+                    placeholder="Ej. Distribuidora Cárnicas"
+                    className="w-full bg-slate-100/60 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 outline-none font-bold"
+                  />
+                </div>
+
+                {/* Corporate Name */}
+                <div>
+                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Razón Social Legal (Empresa)</label>
+                  <input
+                    type="text"
+                    value={corporateName}
+                    onChange={(e) => setCorporateName(e.target.value)}
+                    placeholder="Ej. Robles Cárnicos S.A. de C.V."
                     className="w-full bg-slate-100/60 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 outline-none"
                   />
                 </div>
 
-                {/* RFC */}
+                {/* RNC / RFC */}
                 <div>
-                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Cédula Fiscal RFC *</label>
+                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Identificación Fiscal (RNC / RFC) *</label>
                   <input
                     type="text"
                     required
                     value={rfc}
                     onChange={(e) => setRfc(e.target.value)}
-                    placeholder="RFC de 12 o 13 caracteres"
+                    placeholder="Ej. 101-00234-9"
                     className="w-full bg-slate-100/60 border border-slate-200 rounded-lg px-3 py-2 outline-none font-mono text-slate-800 uppercase"
                   />
                 </div>
 
+                {/* Payment term options */}
+                <div>
+                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Forma / Condición de Pago *</label>
+                  <select
+                    value={paymentTerm}
+                    onChange={(e) => setPaymentTerm(e.target.value)}
+                    className="w-full bg-slate-100/60 border border-slate-200 rounded-lg px-3 py-2 outline-none font-semibold text-slate-800"
+                  >
+                    <option value="Efectivo">Efectivo / Caja Chica</option>
+                    <option value="Transferencia">Transferencia Bancaria</option>
+                    <option value="Crédito 15 días">Crédito Neto (15 días)</option>
+                    <option value="Crédito 30 días">Crédito Neto (30 días)</option>
+                  </select>
+                </div>
+
                 {/* Rating select */}
                 <div>
-                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Nivel de Desempeño / Calificación</label>
+                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Desempeño / Calificación</label>
                   <select
                     value={rating}
                     onChange={(e) => setRating(Number(e.target.value))}
@@ -306,6 +414,19 @@ export default function ProvidersView({
                     <option value={3}>Aceptable ★★★☆☆ (Demoras leves o mermas normales)</option>
                     <option value={2}>Bajo control ★★☆☆☆ (Requiere supervisión constante)</option>
                     <option value={1}>Crítico ★☆☆☆☆ (Incumple o eleva mermas de recibo)</option>
+                  </select>
+                </div>
+
+                {/* Active passive state selection */}
+                <div>
+                  <label className="block text-slate-605 font-bold uppercase text-[9px] mb-1">Estatus del Proveedor</label>
+                  <select
+                    value={isActive ? 'true' : 'false'}
+                    onChange={(e) => setIsActive(e.target.value === 'true')}
+                    className="w-full bg-slate-100/60 border border-slate-200 rounded-lg px-3 py-2 outline-none font-semibold"
+                  >
+                    <option value="true">Activo (Autorizado para Compras)</option>
+                    <option value="false">Inactivo / Pasivo (Bloqueado de Pedidos)</option>
                   </select>
                 </div>
 

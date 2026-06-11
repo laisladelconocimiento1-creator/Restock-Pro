@@ -51,6 +51,9 @@ export interface Provider {
   address: string;
   categories: string[]; // Category IDs
   rating: number; // 1-5
+  paymentTerm?: string; // 'Efectivo' | 'Transferencia' | 'Crédito 15 días' | 'Crédito 30 días'
+  isActive?: boolean;
+  corporateName?: string;
 }
 
 export interface Product {
@@ -240,6 +243,16 @@ export interface RestaurantConfig {
   taxRate: number; // e.g. 16 for 16% IVA
   currencySymbol: string;
   allowedDomain?: string; // Dominio para la verificación de identidad corporativa con Google Sign-In
+  
+  // Extended configuration fields for Restaurante ECG v6
+  companyName?: string;
+  branches?: string[];
+  areas?: string[];
+  currency?: string;
+  timezone?: string;
+  dateFormat?: string;
+  isConfigComplete?: boolean;
+  initialInventoryConfirmed?: boolean;
 }
 
 // === PORCIONAMIENTO, RENDIMIENTO Y CONTROL CONTRA VENTAS ==
