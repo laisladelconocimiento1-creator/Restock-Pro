@@ -1829,5 +1829,50 @@ export const store = {
     );
 
     return { success: true, record: newRecord };
+  },
+
+  resetAllToZero(): void {
+    // 1. Fetch current products
+    const products = this.getProducts();
+    // 2. Map all current stocks and prices to 0
+    const zeroedProducts = products.map((p) => ({
+      ...p,
+      currentStock: 0,
+      portionsAvailable: 0,
+      averageCost: 0,
+      lastPrice: 0,
+      areaStocks: p.areaStocks ? Object.keys(p.areaStocks).reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+      }, {} as Record<string, number>) : { "Cocina": 0 }
+    }));
+    
+    // Save zeroed products back to store
+    setLocalStorageItem(KEYS.PRODUCTS, zeroedProducts);
+
+    // 3. Clear all custom transactional records completely to empty
+    setLocalStorageItem(KEYS.KITCHEN_REQUESTS, []);
+    setLocalStorageItem(KEYS.PURCHASES, []);
+    setLocalStorageItem(KEYS.MOVEMENTS, []);
+    setLocalStorageItem(KEYS.PHYSICAL_SESSIONS, []);
+    setLocalStorageItem(KEYS.PORTION_BATCHES, []);
+    setLocalStorageItem(KEYS.PORTION_MOVEMENTS, []);
+    setLocalStorageItem(KEYS.PORTION_SALES, []);
+    setLocalStorageItem(KEYS.INVENTORY_IMPORTS, []);
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_COLUMNS, []);
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_ROWS, []);
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_ERRORS, []);
+    setLocalStorageItem(KEYS.INVENTORY_IMPORT_MAPPINGS, []);
+    setLocalStorageItem(KEYS.DAILY_CLOSES, []);
+    setLocalStorageItem(KEYS.PRODUCTION_RECORDS, []);
+    setLocalStorageItem(KEYS.RECIPES, []);
+
+    // 4. Log the audit trace for this complete reset operation
+    this.addAuditLog(
+      'PUESTA_A_CERO',
+      'Configurativo',
+      'Puesta a cero general de todas las existencias, historiales de compras, movimientos de kárdex, mermas de porcionamiento y registro de ventas.',
+      'system'
+    );
   }
 };

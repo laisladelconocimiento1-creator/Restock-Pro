@@ -1094,7 +1094,7 @@ export default function MenuAndRecipesView({
             id="btn-direct-sale-quick"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            + Vender Plato
+            Registrar Venta Manual
           </button>
           {currentUserRole !== 'LECTURA' && (
             <>

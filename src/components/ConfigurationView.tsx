@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
-import { Settings, Save, HelpCircle, Shield, Store, Bell, Check } from 'lucide-react';
+import { Settings, Save, HelpCircle, Shield, Store, Bell, Check, Trash2, RefreshCw } from 'lucide-react';
 import { RestaurantConfig, Role } from '../types';
+import { store } from '../data/store';
 
 interface ConfigProps {
   config: RestaurantConfig;
   currentUserRole: Role;
   onUpdateConfig: (conf: RestaurantConfig) => void;
+  onSystemReset?: () => void;
 }
 
 export default function ConfigurationView({
   config,
   currentUserRole,
-  onUpdateConfig
+  onUpdateConfig,
+  onSystemReset
 }: ConfigProps) {
   // Config form states representing real Restaurant metadata variables
   const [restaurantName, setRestaurantName] = useState(config.restaurantName);
@@ -24,8 +27,45 @@ export default function ConfigurationView({
   // General alert limits
   const [lowStockAlertLimit, setLowStockAlertLimit] = useState(5);
   const [consecutiveDaysReconciliation, setConsecutiveDaysReconciliation] = useState(7);
+  const [resetting, setResetting] = useState(false);
 
   const isAdmin = currentUserRole === 'ADMIN';
+
+  const handleResetSystem = async () => {
+    if (!isAdmin) {
+      alert('Solo un administrador con permisos plenos puede realizar esta purga.');
+      return;
+    }
+    
+    const confirmMsg = '¿Está absolutamente seguro de que desea poner en CERO todo el sistema?\n\nEsta acción borrará todas las recetas, mermas, compras, existencias de inventario, auditorías de cocina, ventas manuales e importadas en el servidor y localmente.';
+    if (!window.confirm(confirmMsg)) return;
+
+    if (!window.confirm('ADVERTENCIA: Esta operación es irreversible y reconstruirá los inventarios limpios con valores en cero. ¿Desea efectuar la purga total?')) return;
+
+    setResetting(true);
+    try {
+      const res = await fetch('/api/v1/system/reset-to-zero', {
+        method: 'POST'
+      });
+      const data = await res.json();
+      
+      store.resetAllToZero();
+      
+      alert(data.message || 'El sistema ha sido purgado y puesto a cero de forma exitosa.');
+      if (onSystemReset) {
+        onSystemReset();
+      }
+    } catch (err: any) {
+      console.error(err);
+      store.resetAllToZero();
+      if (onSystemReset) {
+        onSystemReset();
+      }
+      alert('Se realizó la purga del inventario local únicamente debido a falla de red con el servidor.');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,6 +252,37 @@ export default function ConfigurationView({
               <p>✔ Copias de seguridad automáticas activas.</p>
             </div>
           </div>
+
+          {isAdmin && (
+            <div className="bg-red-50/70 rounded-2xl p-6 border border-red-200/80 space-y-4 font-sans">
+              <h4 className="font-display font-bold text-sm text-red-800 flex items-center gap-2">
+                <Trash2 className="w-4.5 h-4.5 text-red-650" />
+                Acciones de Emergencia / Auditoría
+              </h4>
+              <p className="text-red-950 text-[11px] leading-relaxed">
+                Pone en cero todas las existencias, mermas de porcionamiento, recetas operativas, cierres de cocina, registro de ventas e historial de compras de forma global y permanente.
+              </p>
+              <button
+                type="button"
+                onClick={handleResetSystem}
+                disabled={resetting}
+                className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-2.5 px-4 rounded-xl text-xs font-bold font-sans transition cursor-pointer active:scale-95 shadow-sm"
+                id="btn-master-reset-zero"
+              >
+                {resetting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Ejecutando Purga...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Poner todo en 0 ("Pon todo en 0")
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

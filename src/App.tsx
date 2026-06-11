@@ -385,6 +385,7 @@ export default function App() {
               config={config}
               currentUserRole={currentUser.role}
               onUpdateConfig={handleUpdateConfig}
+              onSystemReset={reloadAllDataFromStore}
             />
           )}
 

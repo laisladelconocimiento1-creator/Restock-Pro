@@ -178,6 +178,46 @@ export default function KitchenRequestsView({
     onConvertRequestToPurchase(selectedRequest);
   };
 
+  const handleDeliver = () => {
+    if (!selectedRequest) return;
+    
+    const canDeliver = ['ADMIN', 'GERENTE', 'COMPRAS', 'ALMACEN_RECEPCION'].includes(currentUserRole);
+    if (!canDeliver) {
+      alert('Se requiere el rol de Almacén, Compras, Gerente o Administrador para despachar y entregar insumos.');
+      return;
+    }
+
+    // Double check availability
+    let missingInfo = '';
+    selectedRequest.items.forEach(item => {
+      const prod = products.find(p => p.id === item.productId);
+      if (prod) {
+        const sourceArea = prod.initialReceptionArea || 'Almacén seco';
+        const currentAreaStock = (prod.areaStocks && prod.areaStocks[sourceArea]) || 0;
+        if (currentAreaStock < item.qty) {
+          missingInfo += `\n- ${prod.name}: Solicitado ${item.qty} ${units.find(u => u.id === prod.unitId)?.code || ''}, disponible en ${sourceArea} solo ${currentAreaStock}`;
+        }
+      }
+    });
+
+    if (missingInfo) {
+      if (!window.confirm(`ADVERTENCIA: Hay stock insuficiente en Almacén para los siguientes productos:${missingInfo}\n\n¿Desea continuar de todas formas y permitir stock negativo en Almacén?`)) {
+        return;
+      }
+    }
+
+    const updated: KitchenRequest = {
+      ...selectedRequest,
+      status: 'Entregada',
+      approvedById: currentUserId,
+      approvedByName: currentUserName
+    };
+
+    onUpdateRequest(updated);
+    alert('Requisición despachada y entregada con éxito. Los insumos se han transferido de Almacén a Cocina.');
+    setActiveView('list');
+  };
+
   return (
     <div className="space-y-6" id="kitchen-requests-view">
       {/* View Page Title Header */}
@@ -495,15 +535,29 @@ export default function KitchenRequestsView({
                   </>
                 )}
 
-                {selectedRequest.status === 'Aprobada' && isComprasOrHigher && (
-                  <button
-                    onClick={handleConvertToPurchase}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition shadow-md shadow-indigo-50"
-                    id="btn-convert-request"
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    Surtir / Convertir en Orden de Compra
-                  </button>
+                {selectedRequest.status === 'Aprobada' && (
+                  <div className="flex flex-wrap gap-2">
+                    {['ADMIN', 'GERENTE', 'COMPRAS', 'ALMACEN_RECEPCION'].includes(currentUserRole) && (
+                      <button
+                        onClick={handleDeliver}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition shadow-md shadow-emerald-50"
+                        id="btn-deliver-request"
+                      >
+                        <Check className="w-4 h-4" />
+                        Despachar / Entregar desde Almacén
+                      </button>
+                    )}
+                    {isComprasOrHigher && (
+                      <button
+                        onClick={handleConvertToPurchase}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition shadow-md shadow-indigo-50"
+                        id="btn-convert-request"
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                        Surtir / Convertir en Orden de Compra
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

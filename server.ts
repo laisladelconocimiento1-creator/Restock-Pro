@@ -5031,6 +5031,46 @@ app.post("/api/v1/sales/map-item", (req, res) => {
 });
 
 
+// POST Master Reset System-wide ("Pon Todo en 0")
+app.post("/api/v1/system/reset-to-zero", (req, res) => {
+  try {
+    writeJsonFile(DB_PATHS.IMPORTS, []);
+    writeJsonFile(DB_PATHS.COLUMNS, []);
+    writeJsonFile(DB_PATHS.ROWS, []);
+    writeJsonFile(DB_PATHS.ERRORS, []);
+    writeJsonFile(DB_PATHS.MAPPINGS, []);
+    writeJsonFile(DB_PATHS.OCR_JOBS, []);
+    writeJsonFile(DB_PATHS.OCR_RESULTS, []);
+    writeJsonFile(DB_PATHS.OCR_LINES, []);
+    writeJsonFile(DB_PATHS.SUPPLIER_ALIASES, []);
+    writeJsonFile(DB_PATHS.OCR_CORRECTIONS, []);
+    
+    // Reset Sales and recipes registries
+    writeJsonFile(DB_PATHS.SALES_RECORDS, []);
+    writeJsonFile(DB_PATHS.SALES_IMPORTS, []);
+    writeJsonFile(DB_PATHS.SALES_IMPORT_LINES, []);
+    writeJsonFile(DB_PATHS.MENU_ALIASES, []);
+    writeJsonFile(DB_PATHS.INGREDIENT_ALIASES, []);
+    writeJsonFile(DB_PATHS.RECIPE_IMPORTS, []);
+    writeJsonFile(DB_PATHS.RECIPE_IMPORT_LINES, []);
+    writeJsonFile(DB_PATHS.RECIPE_AUDITS, []);
+    
+    writeJsonFile(DB_PATHS.RECIPES, []);
+    writeJsonFile(DB_PATHS.RECIPE_INGREDIENTS, []);
+    writeJsonFile(DB_PATHS.MENU_ITEMS, []);
+    writeJsonFile(DB_PATHS.COMBOS, []);
+    writeJsonFile(DB_PATHS.COMBO_ITEMS, []);
+
+    res.status(200).json({
+      success: true,
+      message: "Todos los archivos de datos persistentes del servidor han sido puestos a cero con éxito."
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
 // Serve static assets in production or use Vite middleware in dev
 async function serveApplication() {
   if (process.env.NODE_ENV !== "production") {
