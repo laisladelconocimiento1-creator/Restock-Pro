@@ -129,7 +129,16 @@ export default function AuditView({ logs }: AuditProps) {
                     <td className="p-4 text-slate-450">{log.recordId || '—'}</td>
 
                     {/* Message comments */}
-                    <td className="p-4 text-slate-600 font-sans font-medium line-clamp-1 truncate max-w-sm">{log.comment || '—'}</td>
+                    <td className="p-4 text-slate-600 font-sans font-medium max-w-sm">
+                      <div className="line-clamp-1 truncate">{log.comment || '—'}</div>
+                      {log.previousValue !== undefined && log.newValue !== undefined && (
+                        <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1 flex-wrap">
+                          <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">Anterior: {log.previousValue}</span>
+                          <span className="text-slate-400">→</span>
+                          <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">Nuevo: {log.newValue}</span>
+                        </div>
+                      )}
+                    </td>
 
                     {/* Device IP agent metadata */}
                     <td className="p-4 text-slate-400 text-[10px] truncate max-w-[150px]">{log.device || 'Desktop Client'}</td>
@@ -176,9 +185,16 @@ export default function AuditView({ logs }: AuditProps) {
                 </div>
 
                 {log.comment && (
-                  <p className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-[10px] font-sans text-slate-600 italic">
-                    {log.comment}
-                  </p>
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-[10px] font-sans text-slate-600 italic space-y-1">
+                    <p>{log.comment}</p>
+                    {log.previousValue !== undefined && log.newValue !== undefined && (
+                      <div className="text-[9px] font-mono not-italic text-slate-500 flex items-center gap-1 flex-wrap mt-1">
+                        <span className="bg-slate-100 px-1 py-0.5 rounded border">Ant: {log.previousValue}</span>
+                        <span>→</span>
+                        <span className="bg-emerald-50 text-emerald-700 px-1 py-0.5 rounded border border-emerald-100">Nvo: {log.newValue}</span>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 <div className="text-[9px] text-slate-400 font-sans text-right">

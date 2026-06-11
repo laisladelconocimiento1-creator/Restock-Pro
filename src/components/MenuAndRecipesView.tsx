@@ -705,13 +705,45 @@ export default function MenuAndRecipesView({
           store.savePortionMovements([...data.generatedPortionMovements, ...prevPortionMovs]);
         }
 
-        // Add audit log
+        // Add parent audit log
         store.addAuditLog(
           'VENTA_MANUAL',
           'Ventas',
           `Venta manual registrada: ${item.name} x${manualSaleForm.quantity} uds. Canal: ${manualSaleForm.channel}. Operador: ${currentUser.name}`,
           data.saleRecord?.id
         );
+
+        // Record child audit details for standard cardex ingredients deducted
+        if (data.generatedMovements?.length > 0) {
+          data.generatedMovements.forEach((mov: any) => {
+            store.addAuditLog(
+              'RESTA_INVENTARIO_VENTA',
+              'Cruce con Ventas',
+              `Deducción automática por venta manual de plato "${item.name}": -${Math.abs(mov.qty)} ${mov.unitCode} de ${mov.productName}.`,
+              data.saleRecord?.id,
+              String(mov.quantityBefore),
+              String(mov.quantityAfter)
+            );
+          });
+        }
+
+        // Record child audit details for portion stocks deducted
+        if (data.generatedPortionMovements?.length > 0) {
+          data.generatedPortionMovements.forEach((mov: any) => {
+            const oldProd = products.find(p => p.id === mov.productId);
+            const prevPortions = oldProd ? (oldProd.portionsAvailable || 0) : 0;
+            const newPortions = Math.max(0, prevPortions + mov.quantity);
+
+            store.addAuditLog(
+              'RESTA_PORCION_VENTA',
+              'Cruce con Ventas',
+              `Deducción automática de porciones por venta de "${item.name}": ${mov.quantity} porciones de ${oldProd ? oldProd.name : 'Producto'}.`,
+              data.saleRecord?.id,
+              String(prevPortions),
+              String(newPortions)
+            );
+          });
+        }
 
         showToast('success', `Venta manual de ${manualSaleForm.quantity} x "${item.name}" consolidada con éxito.`);
         setShowDirectSaleModal(false); // Close Modal UI
@@ -886,13 +918,47 @@ export default function MenuAndRecipesView({
           store.savePortionMovements([...data.generatedPortionMovements, ...prevPortionMovs]);
         }
 
-        // Add audit log
+        const importIdReference = data.importSummary?.id || 'lote-masivo';
+
+        // Add parent audit log
         store.addAuditLog(
           'COMPROMISO_IMPORTACIÓN',
           'Ventas',
           `Carga masiva de ${data.importSummary?.importedRows} filas efectuada desde ${data.importSummary?.fileName}. Estado de lote: ${data.importSummary?.status}`,
-          data.importSummary?.id
+          importIdReference
         );
+
+        // Record child audit details for standard cardex ingredients deducted
+        if (data.generatedMovements?.length > 0) {
+          data.generatedMovements.forEach((mov: any) => {
+            store.addAuditLog(
+              'RESTA_INVENTARIO_VENTA_MASIVO',
+              'Cruce con Ventas',
+              `Deducción masiva para ingrediente "${mov.productName}": -${Math.abs(mov.qty)} ${mov.unitCode}. Por lote de importación.`,
+              importIdReference,
+              String(mov.quantityBefore),
+              String(mov.quantityAfter)
+            );
+          });
+        }
+
+        // Record child audit details for portion stocks deducted
+        if (data.generatedPortionMovements?.length > 0) {
+          data.generatedPortionMovements.forEach((mov: any) => {
+            const oldProd = products.find(p => p.id === mov.productId);
+            const prevPortions = oldProd ? (oldProd.portionsAvailable || 0) : 0;
+            const newPortions = Math.max(0, prevPortions + mov.quantity);
+
+            store.addAuditLog(
+              'RESTA_PORCION_VENTA_MASIVO',
+              'Cruce con Ventas',
+              `Deducción masiva de porciones por lote de importación: ${mov.quantity} porciones de ${oldProd ? oldProd.name : 'Producto'}.`,
+              importIdReference,
+              String(prevPortions),
+              String(newPortions)
+            );
+          });
+        }
 
         showToast('success', '¡Importación de ventas consolidada y descontada de inventario!');
         setWizardStep('UPLOAD');

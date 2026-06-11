@@ -943,6 +943,17 @@ export const store = {
     const list = this.getMovements();
     list.unshift(movement); // Newest first
     setLocalStorageItem(KEYS.MOVEMENTS, list);
+
+    // Register a detailed AuditLog entry automatically for this inventory change
+    const processId = movement.documentRelatedId || movement.id;
+    this.addAuditLog(
+      `MOVIMIENTO_INVENTARIO_${movement.type.toUpperCase()}`,
+      'Inventario',
+      `Movimiento (${movement.type}): ${movement.productName} [${movement.qty > 0 ? '+' : ''}${movement.qty} ${movement.unitCode}] en ${movement.area}. Motivo: ${movement.reason}`,
+      processId,
+      String(movement.quantityBefore),
+      String(movement.quantityAfter)
+    );
   },
 
   // Physical Sessions
@@ -1335,15 +1346,25 @@ export const store = {
     list.unshift(movement); // Newest first
     this.savePortionMovements(list);
 
+    const prodBefore = this.getProducts().find(p => p.id === movement.productId);
+    const prevPortions = prodBefore ? (prodBefore.portionsAvailable || 0) : 0;
+
     // Apply change to Product portionsAvailable stock
     this.adjustPortionStock(movement.productId, movement.quantity);
 
-    const prod = this.getProducts().find(p => p.id === movement.productId);
+    const prodAfter = this.getProducts().find(p => p.id === movement.productId);
+    const newPortions = prodAfter ? (prodAfter.portionsAvailable || 0) : 0;
+
+    // The reference to the process is movement.relatedEntityId || movement.portionBatchId || movement.id
+    const processId = movement.relatedEntityId || movement.portionBatchId || movement.id;
+
     this.addAuditLog(
       'MOVIMIENTO_PORCION',
       'Porcionamiento',
-      `Movimiento de porciones (${movement.movementType}) registrado para ${prod ? prod.name : 'Producto'}: ${movement.quantity > 0 ? '+' : ''}${movement.quantity} porciones. Motivo: ${movement.reason}`,
-      movement.id
+      `Movimiento de porciones (${movement.movementType}): ${prodBefore ? prodBefore.name : 'Producto'} [${movement.quantity > 0 ? '+' : ''}${movement.quantity} porciones]. Motivo: ${movement.reason}`,
+      processId,
+      String(prevPortions),
+      String(newPortions)
     );
   },
 
@@ -1550,7 +1571,8 @@ export const store = {
             userName: currentUser.name,
             date: new Date().toISOString(),
             reason: `Venta de Plato: ${recipe.name}`,
-            comment: `Deducción de insumos receta q:${quantitySold}. Ref: ${reference || 'Sin Ref'}`
+            comment: `Deducción de insumos receta q:${quantitySold}. Ref: ${reference || 'Sin Ref'}`,
+            documentRelatedId: recipeId
           });
         }
       }
@@ -1664,6 +1686,9 @@ export const store = {
 
     const productsList = this.getProducts();
 
+    // Generate production record ID dynamic up front so we can link all audit/movement child references
+    const newRecordId = 'pr-' + Math.random().toString(36).substr(2, 9);
+
     // 1. Calculate live cost of ingredients based on averageCost from products list
     let generatedTotalCost = 0;
     const ingredientDeductions: { product: Product; qty: number }[] = [];
@@ -1710,7 +1735,8 @@ export const store = {
           userName: user.name,
           date: new Date().toISOString(),
           reason: `Consumo por Producción: ${prep.name}`,
-          comment: `Deducción de insumos automática para lote de producción.`
+          comment: `Deducción de insumos automática para lote de producción.`,
+          documentRelatedId: newRecordId
         });
       }
     });
@@ -1758,7 +1784,8 @@ export const store = {
         userName: user.name,
         date: new Date().toISOString(),
         reason: `Rendimiento de Producción: ${prep.name}`,
-        comment: `Entrada por producción real de ${actualResultQty}g / ${portionsReal} porciones creadas.`
+        comment: `Entrada por producción real de ${actualResultQty}g / ${portionsReal} porciones creadas.`,
+        documentRelatedId: newRecordId
       });
 
       // Record portion movement to keep audit neat
@@ -1774,9 +1801,21 @@ export const store = {
           userId: user.id,
           userName: user.name,
           comment: `Producción de porciones reales resultantes del lote.`,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          relatedEntityType: 'ProductionRecord',
+          relatedEntityId: newRecordId
         });
         setLocalStorageItem(KEYS.PORTION_MOVEMENTS, list);
+
+        // Record a detailed portions transaction inside the Audit Log
+        this.addAuditLog(
+          'INGRESO_PORCIONES_PRODUCCION',
+          'Producción',
+          `Ingreso de porciones por producción de ${prep.name}: +${portionsReal} porciones`,
+          newRecordId,
+          String(prevPortions),
+          String(prevPortions + portionsReal)
+        );
       }
     }
 
@@ -1790,7 +1829,7 @@ export const store = {
 
     // 5. Create production record
     const newRecord = {
-      id: 'pr-' + Math.random().toString(36).substr(2, 9),
+      id: newRecordId,
       preparationId: prepId,
       date: new Date().toISOString(),
       expectedResultQty: prep.expectedResultQty,
